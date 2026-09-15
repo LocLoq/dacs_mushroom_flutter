@@ -22,6 +22,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late int _index;
+  bool _isSidebarVisible = true;
 
   @override
   void initState() {
@@ -42,7 +43,11 @@ class _HomeScreenState extends State<HomeScreen> {
         return LocalSession.isLoggedIn
             ? const FacilityListScreen()
             : _AuthRequiredPlaceholder(
-                title: tr(context, vi: 'Quản Lý Cơ Sở Trại Nấm', en: 'Facility Management'),
+                title: tr(
+                  context,
+                  vi: 'Quản Lý Cơ Sở Trại Nấm',
+                  en: 'Facility Management',
+                ),
                 description: tr(
                   context,
                   vi: 'Tính năng quản lý cơ sở nuôi trồng chỉ dành cho nhân sự và ban quản lý trại. Vui lòng đăng nhập để tiếp tục.',
@@ -54,7 +59,11 @@ class _HomeScreenState extends State<HomeScreen> {
         return LocalSession.isLoggedIn
             ? const StrainListScreen()
             : _AuthRequiredPlaceholder(
-                title: tr(context, vi: 'Quản Lý Giống Nấm', en: 'Mushroom Strains'),
+                title: tr(
+                  context,
+                  vi: 'Quản Lý Giống Nấm',
+                  en: 'Mushroom Strains',
+                ),
                 description: tr(
                   context,
                   vi: 'Tính năng cấu hình thông số kỹ thuật giống nấm (nhiệt độ, độ ẩm, CO2) yêu cầu quyền quản trị.',
@@ -66,7 +75,11 @@ class _HomeScreenState extends State<HomeScreen> {
         return LocalSession.isLoggedIn
             ? const BatchListScreen()
             : _AuthRequiredPlaceholder(
-                title: tr(context, vi: 'Quản Lý Lô Nuôi Trồng', en: 'Cultivation Batch Management'),
+                title: tr(
+                  context,
+                  vi: 'Quản Lý Lô Nuôi Trồng',
+                  en: 'Cultivation Batch Management',
+                ),
                 description: tr(
                   context,
                   vi: 'Tính năng theo dõi lô nuôi trồng (ủ tơ, ra quả thể, thu hoạch, năng suất) yêu cầu đăng nhập.',
@@ -78,7 +91,11 @@ class _HomeScreenState extends State<HomeScreen> {
         return LocalSession.isLoggedIn
             ? const AccountListScreen()
             : _AuthRequiredPlaceholder(
-                title: tr(context, vi: 'Quản Trị Tài Khoản', en: 'Account Management'),
+                title: tr(
+                  context,
+                  vi: 'Quản Trị Tài Khoản',
+                  en: 'Account Management',
+                ),
                 description: tr(
                   context,
                   vi: 'Tính năng phân quyền và quản trị nhân sự yêu cầu tài khoản quản lý / admin.',
@@ -94,41 +111,80 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _buildBody(),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.auto_awesome_outlined),
-            selectedIcon: const Icon(Icons.auto_awesome),
-            label: tr(context, vi: 'Nhận diện AI', en: 'Recognition'),
+      body: Row(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            width: _isSidebarVisible ? 160 : 52,
+            child: Column(
+              children: [
+                Align(
+                  alignment: Alignment.topRight,
+                  child: IconButton(
+                    tooltip: _isSidebarVisible
+                        ? 'Ẩn thanh bên'
+                        : 'Hiện thanh bên',
+                    icon: Icon(
+                      _isSidebarVisible
+                          ? Icons.keyboard_double_arrow_left
+                          : Icons.keyboard_double_arrow_right,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isSidebarVisible = !_isSidebarVisible;
+                      });
+                    },
+                  ),
+                ),
+                if (_isSidebarVisible)
+                  Expanded(
+                    child: NavigationRail(
+                      selectedIndex: _index,
+                      onDestinationSelected: (index) {
+                        setState(() {
+                          _index = index;
+                        });
+                      },
+                      labelType: NavigationRailLabelType.all,
+                      destinations: const [
+                        NavigationRailDestination(
+                          icon: Icon(Icons.auto_awesome_outlined),
+                          selectedIcon: Icon(Icons.auto_awesome),
+                          label: Text('Nhận diện AI'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.menu_book_outlined),
+                          selectedIcon: Icon(Icons.menu_book),
+                          label: Text('Từ điển'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.factory_outlined),
+                          selectedIcon: Icon(Icons.factory),
+                          label: Text('Cơ sở'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.spa_outlined),
+                          selectedIcon: Icon(Icons.spa),
+                          label: Text('Giống nấm'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.eco_outlined),
+                          selectedIcon: Icon(Icons.eco),
+                          label: Text('Lô nuôi trồng'),
+                        ),
+                        NavigationRailDestination(
+                          icon: Icon(Icons.people_outline),
+                          selectedIcon: Icon(Icons.people),
+                          label: Text('Tài khoản'),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.menu_book_outlined),
-            selectedIcon: const Icon(Icons.menu_book),
-            label: tr(context, vi: 'Từ điển nấm', en: 'Catalog'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.factory_outlined),
-            selectedIcon: const Icon(Icons.factory),
-            label: tr(context, vi: 'Cơ sở', en: 'Facility'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.spa_outlined),
-            selectedIcon: const Icon(Icons.spa),
-            label: tr(context, vi: 'Giống nấm', en: 'Strains'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.eco_outlined),
-            selectedIcon: const Icon(Icons.eco),
-            label: tr(context, vi: 'Lô nuôi trồng', en: 'Batches'),
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.people_outline),
-            selectedIcon: const Icon(Icons.people),
-            label: tr(context, vi: 'Tài khoản', en: 'Account'),
-          ),
+          const VerticalDivider(width: 1),
+          Expanded(child: _buildBody()),
         ],
       ),
     );
@@ -166,7 +222,10 @@ class _AuthRequiredPlaceholder extends StatelessWidget {
               const SizedBox(height: 20),
               Text(
                 tr(context, vi: 'Yêu Cầu Đăng Nhập', en: 'Login Required'),
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 12),
               Text(
@@ -181,20 +240,28 @@ class _AuthRequiredPlaceholder extends StatelessWidget {
               const SizedBox(height: 28),
               FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 icon: const Icon(Icons.login),
                 label: Text(
                   tr(context, vi: 'Đăng Nhập Ngay', en: 'Login Now'),
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const LoginScreen(),
-                    ),
-                  ).then((_) => onLoginSuccess());
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      )
+                      .then((_) => onLoginSuccess());
                 },
               ),
             ],
