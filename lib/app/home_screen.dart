@@ -4,6 +4,7 @@ import '../core/localization/app_text_scope.dart';
 import '../core/storage/local_session.dart';
 import '../features/account/presentation/account_list_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
+import '../features/cultivation_batch/presentation/batch_list_screen.dart';
 import '../features/facility/presentation/facility_list_screen.dart';
 import '../features/mushroom_catalog/presentation/mushroom_catalog_screen.dart';
 import '../features/mushroom_strain/presentation/strain_list_screen.dart';
@@ -63,6 +64,18 @@ class _HomeScreenState extends State<HomeScreen> {
               );
       case 4:
         return LocalSession.isLoggedIn
+            ? const BatchListScreen()
+            : _AuthRequiredPlaceholder(
+                title: tr(context, vi: 'Quản Lý Lô Nuôi Trồng', en: 'Cultivation Batch Management'),
+                description: tr(
+                  context,
+                  vi: 'Tính năng theo dõi lô nuôi trồng (ủ tơ, ra quả thể, thu hoạch, năng suất) yêu cầu đăng nhập.',
+                  en: 'Batch tracking (incubation, fruiting, harvesting, yield) requires authentication.',
+                ),
+                onLoginSuccess: () => setState(() {}),
+              );
+      case 5:
+        return LocalSession.isLoggedIn
             ? const AccountListScreen()
             : _AuthRequiredPlaceholder(
                 title: tr(context, vi: 'Quản Trị Tài Khoản', en: 'Account Management'),
@@ -105,6 +118,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.spa_outlined),
             selectedIcon: const Icon(Icons.spa),
             label: tr(context, vi: 'Giống nấm', en: 'Strains'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.eco_outlined),
+            selectedIcon: const Icon(Icons.eco),
+            label: tr(context, vi: 'Lô nuôi trồng', en: 'Batches'),
           ),
           NavigationDestination(
             icon: const Icon(Icons.people_outline),

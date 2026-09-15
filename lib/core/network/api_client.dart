@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../features/account/data/account_model.dart';
+import '../../features/cultivation_batch/data/batch_model.dart';
 import '../../features/facility/data/facility_model.dart';
 import '../../features/mushroom_catalog/data/catalog_model.dart';
 import '../../features/mushroom_strain/data/strain_model.dart';
@@ -97,6 +98,25 @@ class ApiClient {
     required bool mustChangePassword,
   }) async {
     await Future.delayed(const Duration(milliseconds: 300));
+  }
+
+  // TODO(BACKEND): GET {baseUrl}/cultivation-batches/?search=&status=&facility_id=
+  Future<List<BatchModel>> fetchBatches() async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    return mockBatches;
+  }
+
+  // TODO(BACKEND): POST {baseUrl}/cultivation-batches/  hoặc  PUT {baseUrl}/cultivation-batches/{id}/
+  // Backend nên validate: batchCode unique, startDate <= expectedHarvestDate, facility/mushroom tồn tại.
+  Future<void> saveBatch(BatchModel batch) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final i = mockBatches.indexWhere((b) => b.id == batch.id);
+    if (i >= 0) {
+      mockBatches[i] = batch;
+    } else {
+      mockBatches.add(batch);
+    }
+    // TODO(BACKEND): xử lý response, throw lỗi nếu status != 200/201
   }
 
   // GET /api/mushrooms/catalog
