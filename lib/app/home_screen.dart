@@ -24,12 +24,31 @@ class _HomeScreenState extends State<HomeScreen> {
   late int _index;
   bool _isSidebarVisible = true;
 
+  final List<_SidebarItem> _items = const [
+    _SidebarItem(
+      Icons.auto_awesome_outlined,
+      Icons.auto_awesome,
+      'Nhận diện AI',
+    ),
+    _SidebarItem(Icons.menu_book_outlined, Icons.menu_book, 'Từ điển'),
+    _SidebarItem(Icons.factory_outlined, Icons.factory, 'Cơ sở'),
+    _SidebarItem(Icons.spa_outlined, Icons.spa, 'Giống nấm'),
+    _SidebarItem(Icons.eco_outlined, Icons.eco, 'Lô nuôi trồng'),
+    _SidebarItem(Icons.people_outline, Icons.people, 'Tài khoản'),
+  ];
+
   @override
   void initState() {
     super.initState();
     _index = widget.initialIndex;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FirstRunBackendDialog.checkAndShow(context);
+    });
+  }
+
+  void _toggleSidebar() {
+    setState(() {
+      _isSidebarVisible = !_isSidebarVisible;
     });
   }
 
@@ -110,85 +129,229 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       body: Row(
         children: [
           AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            width: _isSidebarVisible ? 160 : 52,
-            child: Column(
-              children: [
-                Align(
-                  alignment: Alignment.topRight,
-                  child: IconButton(
-                    tooltip: _isSidebarVisible
-                        ? 'Ẩn thanh bên'
-                        : 'Hiện thanh bên',
-                    icon: Icon(
-                      _isSidebarVisible
-                          ? Icons.keyboard_double_arrow_left
-                          : Icons.keyboard_double_arrow_right,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _isSidebarVisible = !_isSidebarVisible;
-                      });
-                    },
-                  ),
+            duration: const Duration(milliseconds: 220),
+            width: _isSidebarVisible ? 220 : 78,
+            curve: Curves.easeInOutCubic,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              border: Border(
+                right: BorderSide(
+                  color: theme.colorScheme.outlineVariant.withOpacity(0.8),
+                  width: 1,
                 ),
-                if (_isSidebarVisible)
-                  Expanded(
-                    child: NavigationRail(
-                      selectedIndex: _index,
-                      onDestinationSelected: (index) {
-                        setState(() {
-                          _index = index;
-                        });
-                      },
-                      labelType: NavigationRailLabelType.all,
-                      destinations: const [
-                        NavigationRailDestination(
-                          icon: Icon(Icons.auto_awesome_outlined),
-                          selectedIcon: Icon(Icons.auto_awesome),
-                          label: Text('Nhận diện AI'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(Icons.menu_book_outlined),
-                          selectedIcon: Icon(Icons.menu_book),
-                          label: Text('Từ điển'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(Icons.factory_outlined),
-                          selectedIcon: Icon(Icons.factory),
-                          label: Text('Cơ sở'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(Icons.spa_outlined),
-                          selectedIcon: Icon(Icons.spa),
-                          label: Text('Giống nấm'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(Icons.eco_outlined),
-                          selectedIcon: Icon(Icons.eco),
-                          label: Text('Lô nuôi trồng'),
-                        ),
-                        NavigationRailDestination(
-                          icon: Icon(Icons.people_outline),
-                          selectedIcon: Icon(Icons.people),
-                          label: Text('Tài khoản'),
-                        ),
-                      ],
-                    ),
-                  ),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 12,
+                  offset: const Offset(2, 0),
+                ),
               ],
             ),
+            child: SafeArea(
+              child: Column(
+                children: [
+                  const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: _isSidebarVisible
+                        ? Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(8),
+                                      onTap: _toggleSidebar,
+                                      child: Container(
+                                        width: 32,
+                                        height: 32,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              theme.colorScheme.primary,
+                                              theme.colorScheme.tertiary,
+                                            ],
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.menu_rounded,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'thu',
+                                    style: TextStyle(
+                                      color: theme.colorScheme.primary,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(10),
+                                  onTap: () {},
+                                  child: Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: theme
+                                          .colorScheme
+                                          .surfaceContainerHighest
+                                          .withOpacity(0.7),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Icon(
+                                      Icons.notifications_none_rounded,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Center(
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(8),
+                                onTap: _toggleSidebar,
+                                child: Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        theme.colorScheme.primary,
+                                        theme.colorScheme.tertiary,
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.menu_rounded,
+                                    size: 16,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      itemCount: _items.length,
+                      itemBuilder: (context, index) {
+                        final item = _items[index];
+                        final selected = index == _index;
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeInOut,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              color: selected
+                                  ? theme.colorScheme.primaryContainer
+                                  : Colors.transparent,
+                            ),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: () {
+                                setState(() {
+                                  _index = index;
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 12,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      selected
+                                          ? item.selectedIcon
+                                          : item.unselectedIcon,
+                                      color: selected
+                                          ? theme.colorScheme.primary
+                                          : theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                    if (_isSidebarVisible) ...[
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          item.label,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: selected
+                                                ? theme.colorScheme.primary
+                                                : theme
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                            fontWeight: selected
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          const VerticalDivider(width: 1),
           Expanded(child: _buildBody()),
         ],
       ),
     );
   }
+}
+
+class _SidebarItem {
+  final IconData unselectedIcon;
+  final IconData selectedIcon;
+  final String label;
+
+  const _SidebarItem(this.unselectedIcon, this.selectedIcon, this.label);
 }
 
 class _AuthRequiredPlaceholder extends StatelessWidget {
@@ -206,65 +369,69 @@ class _AuthRequiredPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(title: Text(title)),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.lock_outline_rounded,
-                size: 72,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                tr(context, vi: 'Yêu Cầu Đăng Nhập', en: 'Login Required'),
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.lock_outline_rounded,
+                  size: 72,
+                  color: theme.colorScheme.primary,
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                description,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: theme.colorScheme.onSurfaceVariant,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 28),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                icon: const Icon(Icons.login),
-                label: Text(
-                  tr(context, vi: 'Đăng Nhập Ngay', en: 'Login Now'),
+                const SizedBox(height: 20),
+                Text(
+                  tr(context, vi: 'Yêu Cầu Đăng Nhập', en: 'Login Required'),
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                onPressed: () {
-                  Navigator.of(context)
-                      .push(
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                      )
-                      .then((_) => onLoginSuccess());
-                },
-              ),
-            ],
+                const SizedBox(height: 12),
+                Text(
+                  description,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 28,
+                      vertical: 14,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(Icons.login),
+                  label: Text(
+                    tr(context, vi: 'Đăng Nhập Ngay', en: 'Login Now'),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context)
+                        .push(
+                          MaterialPageRoute(
+                            builder: (_) => const LoginScreen(),
+                          ),
+                        )
+                        .then((_) => onLoginSuccess());
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
