@@ -1,10 +1,12 @@
 # 08 — Shared Core (`app/theme`, `app/config`, `core/*`)
 
 ## Theme
+
 - `lib/app/theme/app_colors.dart` — `AppColors`: static `const Color` fields (`primary`, `primaryDark`, `background`, `card`, `textPrimary`, `textSecondary`, `danger`, `warning`, `success`). Bổ sung màu xanh rêu thực vật (`#4F772D` / `#2D6A4F`) và màu dark theme (`#90A955`).
 - `lib/app/theme/app_theme.dart` — Cung cấp cả `AppTheme.light()` và `AppTheme.dark()`, `useMaterial3: true`, card bo tròn `borderRadius: 18`, input bo tròn `borderRadius: 14`.
 
 ## Localization (`lib/core/localization/`)
+
 - `app_language.dart`: Enum `AppLanguage { vi, en }`.
 - `app_text_scope.dart`: `AppTextScope` kế thừa `InheritedWidget`, cung cấp hàm helper:
   ```dart
@@ -15,6 +17,7 @@
 ## Dịch vụ Lõi (`lib/core/services/`)
 
 ### 1. `FrameSelectorService` (`lib/core/services/frame_selector_service.dart`)
+
 - **Mục đích:** Xử lý và đánh giá chất lượng ảnh tĩnh hoặc video trên máy client.
 - **Phương thức:**
   - `prepareFromImage(File file)`: Đọc mảng byte, tính điểm chất lượng qua `_scoreFrameQuality`.
@@ -27,6 +30,7 @@
   - Điểm tổng hợp: $\text{QualityScore} = 0.8 \times \text{SharpnessScore} + 0.2 \times \text{ExposureScore}$.
 
 ### 2. `BackendQueueService` (`lib/core/services/backend_queue_service.dart`)
+
 - **Mục đích:** Quản lý giao tiếp mạng HTTP & WebSocket với server.
 - **Tính năng:**
   - Chuẩn hóa URL (`normalizeBaseUrl`): Bắt buộc scheme `http`/`https`, loại bỏ path thừa.
@@ -37,6 +41,7 @@
   - Hỗ trợ chế độ offline simulation (giả lập kết quả nhận diện sau 2s khi không có backend) để kiểm thử và demo.
 
 ### 3. `RecognitionHistoryService` (`lib/core/services/recognition_history_service.dart`)
+
 - **Mục đích:** Lưu trữ bền vững (Offline-first) toàn bộ kết quả nhận diện trên thiết bị.
 - **Quy tắc:**
   - Lưu mảng JSON trong `SharedPreferences` dưới key `recognition_history_v1`.
@@ -45,6 +50,7 @@
   - Xử lý tên file an toàn (`_safeName`) thay thế ký tự lạ bằng `_`.
 
 ### 4. `AppPreferencesService` (`lib/core/services/app_preferences_service.dart`)
+
 - **Mục đích:** Đọc/ghi cấu hình ứng dụng qua `SharedPreferences`:
   - `backend_base_url`: URL server FastAPI.
   - `dark_mode`: Cờ giao diện tối (`bool`).
@@ -52,10 +58,12 @@
   - `backend_configured`: Cờ đánh dấu đã qua bước thiết lập lần đầu.
 
 ## Config
+
 - `lib/app/config/env_config.dart` — `EnvConfig.baseUrl`, `connectTimeout`, `receiveTimeout`.
 - `lib/app/config/app_constants.dart` — `AppConstants.kDefaultBackendBaseUrl`, các key lưu trữ `SharedPreferences`.
 
 ## `lib/core/storage/local_session.dart` — `LocalSession`
+
 ```dart
 class LocalSession {
   static String? _token;
@@ -69,9 +77,16 @@ class LocalSession {
 ```
 
 ## Shared widgets (`lib/core/widgets/`)
-| File | Class | Notes |
-|---|---|---|
-| `custom_button.dart` | `CustomButton` | Wraps `ElevatedButton`. Props: `label`, `onPressed`, `loading`, optional `icon`. Height: 48. |
-| `custom_textfield.dart` | `CustomTextField` | Wraps `TextField`. Props: `label`, `controller`, `obscure`, `keyboardType`, `suffixIcon`. |
-| `status_chip.dart` | `StatusChip` | Pill-shaped label, `text` + `color`. |
 
+| File                    | Class             | Notes                                                                                        |
+| ----------------------- | ----------------- | -------------------------------------------------------------------------------------------- |
+| `custom_button.dart`    | `CustomButton`    | Wraps `ElevatedButton`. Props: `label`, `onPressed`, `loading`, optional `icon`. Height: 48. |
+| `custom_textfield.dart` | `CustomTextField` | Wraps `TextField`. Props: `label`, `controller`, `obscure`, `keyboardType`, `suffixIcon`.    |
+| `status_chip.dart`      | `StatusChip`      | Pill-shaped label, `text` + `color`.                                                         |
+
+## HomeScreen integration
+
+- `LocalSession.isLoggedIn` được dùng làm điều kiện truy cập các module quản trị.
+- Hàm `tr(...)` cung cấp nội dung đa ngôn ngữ cho trạng thái yêu cầu đăng nhập.
+- `_AuthRequiredPlaceholder` hiển thị hướng dẫn đăng nhập và callback cập nhật Home sau khi đăng nhập thành công.
+- `FirstRunBackendDialog.checkAndShow(context)` được gọi khi Home khởi tạo.

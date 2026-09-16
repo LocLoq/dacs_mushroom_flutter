@@ -1,6 +1,7 @@
 # 01 — Architecture
 
 ## Layer rule (strict, never violate)
+
 ```
 features/*/presentation/  →  features/*/data/  +  core/*  +  app/theme/
 features/*/data/          →  (nothing — leaf nodes, pure Dart, no imports of app/core/features)
@@ -10,11 +11,31 @@ core/widgets/*             →  app/theme/app_colors.dart  only (never features/
 core/storage/*             →  (nothing)
 app/*                      →  features/*/presentation/, core/*, app/theme/, app/config/
 ```
+
 **Never** import a `presentation/` file from a `data/` file, and never import a `features/X` file from `core/widgets/`. If you need a widget to know about a feature's model, pass it as a constructor parameter instead — do not add the import.
 
 All imports in this codebase are **relative** (`../../core/...`), not `package:thu/...`. Keep new files consistent with this — do not introduce package-style imports.
 
+## HomeScreen
+
+File: `lib/app/home_screen.dart`
+
+- `HomeScreen` là shell điều hướng chính của ứng dụng.
+- Điều hướng sử dụng sidebar.
+- Sidebar chứa 6 module:
+  - `MushroomRecognitionScreen`
+  - `MushroomCatalogScreen`
+  - `FacilityListScreen`
+  - `StrainListScreen`
+  - `BatchListScreen`
+  - `AccountListScreen`
+- `initialIndex` xác định module được mở ban đầu.
+- `_index` xác định nội dung đang hiển thị.
+- `_isSidebarVisible` điều khiển trạng thái hiển thị sidebar.
+- `FirstRunBackendDialog.checkAndShow(context)` được gọi sau frame đầu tiên.
+
 ## Full file tree (lib/)
+
 ```
 lib/
 ├── main.dart                                          # entry point, calls runApp(MushroomApp())
@@ -99,6 +120,7 @@ lib/
 ```
 
 ## Naming conventions in use
+
 - File names: `snake_case.dart`. Class names: `PascalCase`.
 - Screen widgets end in `Screen` (e.g. `FacilityListScreen`). Bottom-sheet/dialog form widgets end in `Sheet` (e.g. `StrainFormSheet`, `AccountEditSheet`).
 - Private State classes: `_XxxState` for `class Xxx extends StatefulWidget`.
@@ -106,7 +128,9 @@ lib/
 - Every unimplemented backend integration point is marked `// TODO(BACKEND): ...` — grep for this tag to find all integration points (`grep -rn "TODO(BACKEND)" lib/`).
 
 ## Widget composition pattern used throughout (for any new feature)
+
 Every list screen (`FacilityListScreen`, `StrainListScreen`, `AccountListScreen`) follows the same lifecycle:
+
 1. `State` holds `ApiClient _api`, a `List<XModel> _items = []`, `bool _loading = true`.
 2. `initState()` calls `super.initState()` then a private `_load()`.
 3. `_load()` is `async`, calls `_api.fetchX()`, then `setState(() { _items = data; _loading = false; })`.
