@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_colors.dart';
+import '../../../core/localization/app_text_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../facility/data/facility_model.dart';
 import '../../mushroom_strain/data/strain_model.dart';
@@ -8,7 +9,9 @@ import '../data/batch_model.dart';
 import 'batch_form_sheet.dart';
 
 class BatchListScreen extends StatefulWidget {
-  const BatchListScreen({super.key});
+  final VoidCallback? onOpenNavigation;
+
+  const BatchListScreen({super.key, this.onOpenNavigation});
 
   @override
   State<BatchListScreen> createState() => _BatchListScreenState();
@@ -99,7 +102,25 @@ class _BatchListScreenState extends State<BatchListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Lô nuôi trồng')),
+      appBar: AppBar(
+        leading: widget.onOpenNavigation == null
+            ? null
+            : IconButton(
+                key: const Key('home-appbar-menu-button'),
+                tooltip: tr(
+                  context,
+                  vi: 'Mở menu điều hướng',
+                  en: 'Open navigation menu',
+                ),
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: widget.onOpenNavigation,
+              ),
+        title: const Text(
+          'Lô nuôi trồng',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: (_facilities.isEmpty || _strains.isEmpty) ? null : () => _openForm(),
         backgroundColor: AppColors.primary,

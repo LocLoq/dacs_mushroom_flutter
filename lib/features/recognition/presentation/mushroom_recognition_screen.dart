@@ -14,7 +14,9 @@ import '../../recognition_history/presentation/recognition_history_screen.dart';
 import '../../settings/presentation/settings_screen.dart';
 
 class MushroomRecognitionScreen extends StatefulWidget {
-  const MushroomRecognitionScreen({super.key});
+  final VoidCallback? onOpenNavigation;
+
+  const MushroomRecognitionScreen({super.key, this.onOpenNavigation});
 
   @override
   State<MushroomRecognitionScreen> createState() =>
@@ -183,8 +185,22 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: widget.onOpenNavigation == null
+            ? null
+            : IconButton(
+                key: const Key('home-appbar-menu-button'),
+                tooltip: tr(
+                  context,
+                  vi: 'Mở menu điều hướng',
+                  en: 'Open navigation menu',
+                ),
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: widget.onOpenNavigation,
+              ),
         title: Text(
           tr(context, vi: 'Nhận Diện Nấm AI', en: 'AI Mushroom Recognition'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         actions: [
           IconButton(

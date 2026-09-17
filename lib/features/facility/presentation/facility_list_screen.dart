@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_colors.dart';
+import '../../../core/localization/app_text_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/widgets/status_chip.dart';
 import '../data/facility_model.dart';
@@ -8,7 +9,9 @@ import '../data/facility_model.dart';
 // + facility_selector_dialog.dart (gộp trong hàm _openSelector bên dưới)
 
 class FacilityListScreen extends StatefulWidget {
-  const FacilityListScreen({super.key});
+  final VoidCallback? onOpenNavigation;
+
+  const FacilityListScreen({super.key, this.onOpenNavigation});
 
   @override
   State<FacilityListScreen> createState() => _FacilityListScreenState();
@@ -82,7 +85,25 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Cơ sở sản xuất')),
+      appBar: AppBar(
+        leading: widget.onOpenNavigation == null
+            ? null
+            : IconButton(
+                key: const Key('home-appbar-menu-button'),
+                tooltip: tr(
+                  context,
+                  vi: 'Mở menu điều hướng',
+                  en: 'Open navigation menu',
+                ),
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: widget.onOpenNavigation,
+              ),
+        title: const Text(
+          'Cơ sở sản xuất',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

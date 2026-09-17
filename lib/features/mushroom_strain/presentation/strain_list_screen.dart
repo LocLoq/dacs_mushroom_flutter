@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_colors.dart';
+import '../../../core/localization/app_text_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../data/strain_model.dart';
 import 'strain_form_sheet.dart';
 
 class StrainListScreen extends StatefulWidget {
-  const StrainListScreen({super.key});
+  final VoidCallback? onOpenNavigation;
+
+  const StrainListScreen({super.key, this.onOpenNavigation});
 
   @override
   State<StrainListScreen> createState() => _StrainListScreenState();
@@ -49,7 +52,25 @@ class _StrainListScreenState extends State<StrainListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Giống nấm')),
+      appBar: AppBar(
+        leading: widget.onOpenNavigation == null
+            ? null
+            : IconButton(
+                key: const Key('home-appbar-menu-button'),
+                tooltip: tr(
+                  context,
+                  vi: 'Mở menu điều hướng',
+                  en: 'Open navigation menu',
+                ),
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: widget.onOpenNavigation,
+              ),
+        title: const Text(
+          'Giống nấm',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _openForm(),
         backgroundColor: AppColors.primary,

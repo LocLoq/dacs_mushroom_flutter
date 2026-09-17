@@ -21,20 +21,27 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late int _index;
-  bool _isSidebarVisible = true;
+  static const _compactBreakpoint = 600.0;
+  static const _expandedSidebarBreakpoint = 1024.0;
+  static const _railWidth = 72.0;
+  static const _expandedRailWidth = 220.0;
 
-  final List<_SidebarItem> _items = const [
-    _SidebarItem(
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  late int _index;
+  bool? _sidebarExpandedOverride;
+  bool? _wasCompact;
+
+  final List<_NavigationItem> _items = const [
+    _NavigationItem(
       Icons.auto_awesome_outlined,
       Icons.auto_awesome,
       'Nhận diện AI',
     ),
-    _SidebarItem(Icons.menu_book_outlined, Icons.menu_book, 'Từ điển'),
-    _SidebarItem(Icons.factory_outlined, Icons.factory, 'Cơ sở'),
-    _SidebarItem(Icons.spa_outlined, Icons.spa, 'Giống nấm'),
-    _SidebarItem(Icons.eco_outlined, Icons.eco, 'Lô nuôi trồng'),
-    _SidebarItem(Icons.people_outline, Icons.people, 'Tài khoản'),
+    _NavigationItem(Icons.menu_book_outlined, Icons.menu_book, 'Từ điển'),
+    _NavigationItem(Icons.factory_outlined, Icons.factory, 'Cơ sở'),
+    _NavigationItem(Icons.spa_outlined, Icons.spa, 'Giống nấm'),
+    _NavigationItem(Icons.eco_outlined, Icons.eco, 'Lô nuôi trồng'),
+    _NavigationItem(Icons.people_outline, Icons.people, 'Tài khoản'),
   ];
 
   @override
@@ -46,21 +53,27 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _toggleSidebar() {
-    setState(() {
-      _isSidebarVisible = !_isSidebarVisible;
-    });
+  void _openNavigation() {
+    _scaffoldKey.currentState?.openDrawer();
   }
 
-  Widget _buildBody() {
+  void _selectDestination(int index, {bool closeDrawer = false}) {
+    setState(() => _index = index);
+
+    if (closeDrawer && (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Widget _buildBody({VoidCallback? onOpenNavigation}) {
     switch (_index) {
       case 0:
-        return const MushroomRecognitionScreen();
+        return MushroomRecognitionScreen(onOpenNavigation: onOpenNavigation);
       case 1:
-        return const MushroomCatalogScreen();
+        return MushroomCatalogScreen(onOpenNavigation: onOpenNavigation);
       case 2:
         return LocalSession.isLoggedIn
-            ? const FacilityListScreen()
+            ? FacilityListScreen(onOpenNavigation: onOpenNavigation)
             : _AuthRequiredPlaceholder(
                 title: tr(
                   context,
@@ -73,10 +86,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   en: 'Facility management is restricted to authorized personnel. Please login to proceed.',
                 ),
                 onLoginSuccess: () => setState(() {}),
+                onOpenNavigation: onOpenNavigation,
               );
       case 3:
         return LocalSession.isLoggedIn
-            ? const StrainListScreen()
+            ? StrainListScreen(onOpenNavigation: onOpenNavigation)
             : _AuthRequiredPlaceholder(
                 title: tr(
                   context,
@@ -89,10 +103,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   en: 'Strain parameter management (temp, humidity, CO2) requires authentication.',
                 ),
                 onLoginSuccess: () => setState(() {}),
+                onOpenNavigation: onOpenNavigation,
               );
       case 4:
         return LocalSession.isLoggedIn
-            ? const BatchListScreen()
+            ? BatchListScreen(onOpenNavigation: onOpenNavigation)
             : _AuthRequiredPlaceholder(
                 title: tr(
                   context,
@@ -105,10 +120,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   en: 'Batch tracking (incubation, fruiting, harvesting, yield) requires authentication.',
                 ),
                 onLoginSuccess: () => setState(() {}),
+                onOpenNavigation: onOpenNavigation,
               );
       case 5:
         return LocalSession.isLoggedIn
-            ? const AccountListScreen()
+            ? AccountListScreen(onOpenNavigation: onOpenNavigation)
             : _AuthRequiredPlaceholder(
                 title: tr(
                   context,
@@ -121,256 +137,181 @@ class _HomeScreenState extends State<HomeScreen> {
                   en: 'User administration and role management requires admin/manager privileges.',
                 ),
                 onLoginSuccess: () => setState(() {}),
+                onOpenNavigation: onOpenNavigation,
               );
       default:
-        return const MushroomRecognitionScreen();
+        return MushroomRecognitionScreen(onOpenNavigation: onOpenNavigation);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildDrawer(BuildContext context, double screenWidth) {
+    final drawerWidth = screenWidth * 0.9 > 300 ? 300.0 : screenWidth * 0.9;
     final theme = Theme.of(context);
 
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      body: Row(
+    return DrawerTheme(
+      data: DrawerTheme.of(context).copyWith(width: drawerWidth),
+      child: NavigationDrawer(
+        key: const Key('home-navigation-drawer'),
+        selectedIndex: _index,
+        onDestinationSelected: (index) {
+          _selectDestination(index, closeDrawer: true);
+        },
         children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            width: _isSidebarVisible ? 220 : 78,
-            curve: Curves.easeInOutCubic,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              border: Border(
-                right: BorderSide(
-                  color: theme.colorScheme.outlineVariant.withOpacity(0.8),
-                  width: 1,
-                ),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 12,
-                  offset: const Offset(2, 0),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 28, 20, 20),
+            child: Row(
+              children: [
+                Icon(Icons.eco_rounded, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    tr(
+                      context,
+                      vi: 'Quản lý & Nhận diện Nấm',
+                      en: 'Mushroom Management & AI',
+                    ),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ],
             ),
-            child: SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 6),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: _isSidebarVisible
-                        ? Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Material(
-                                    color: Colors.transparent,
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(8),
-                                      onTap: _toggleSidebar,
-                                      child: Container(
-                                        width: 32,
-                                        height: 32,
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              theme.colorScheme.primary,
-                                              theme.colorScheme.tertiary,
-                                            ],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                        ),
-                                        child: const Icon(
-                                          Icons.menu_rounded,
-                                          size: 16,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'thu',
-                                    style: TextStyle(
-                                      color: theme.colorScheme.primary,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(10),
-                                  onTap: () {},
-                                  child: Container(
-                                    width: 32,
-                                    height: 32,
-                                    decoration: BoxDecoration(
-                                      color: theme
-                                          .colorScheme
-                                          .surfaceContainerHighest
-                                          .withOpacity(0.7),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Icon(
-                                      Icons.notifications_none_rounded,
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          )
-                        : Center(
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(8),
-                                onTap: _toggleSidebar,
-                                child: Container(
-                                  width: 32,
-                                  height: 32,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        theme.colorScheme.primary,
-                                        theme.colorScheme.tertiary,
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(
-                                    Icons.menu_rounded,
-                                    size: 16,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                  ),
-                  const Divider(height: 1),
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      itemCount: _items.length,
-                      itemBuilder: (context, index) {
-                        final item = _items[index];
-                        final selected = index == _index;
-
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeInOut,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(14),
-                              color: selected
-                                  ? theme.colorScheme.primaryContainer
-                                  : Colors.transparent,
-                            ),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(14),
-                              onTap: () {
-                                setState(() {
-                                  _index = index;
-                                });
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 12,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      selected
-                                          ? item.selectedIcon
-                                          : item.unselectedIcon,
-                                      color: selected
-                                          ? theme.colorScheme.primary
-                                          : theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                    if (_isSidebarVisible) ...[
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          item.label,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: selected
-                                                ? theme.colorScheme.primary
-                                                : theme
-                                                      .colorScheme
-                                                      .onSurfaceVariant,
-                                            fontWeight: selected
-                                                ? FontWeight.w700
-                                                : FontWeight.w500,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
+          ),
+          const Divider(height: 1),
+          ..._items.map(
+            (item) => NavigationDrawerDestination(
+              icon: Icon(item.unselectedIcon),
+              selectedIcon: Icon(item.selectedIcon),
+              label: Text(item.label),
             ),
           ),
-          Expanded(child: _buildBody()),
         ],
       ),
     );
   }
+
+  Widget _buildRail(BuildContext context, bool isExpanded) {
+    return NavigationRail(
+      selectedIndex: _index,
+      extended: isExpanded,
+      minWidth: _railWidth,
+      minExtendedWidth: _expandedRailWidth,
+      labelType: NavigationRailLabelType.none,
+      leading: Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 12),
+        child: Tooltip(
+          message: isExpanded
+              ? tr(context, vi: 'Thu gọn menu', en: 'Collapse menu')
+              : tr(context, vi: 'Mở rộng menu', en: 'Expand menu'),
+          child: IconButton(
+            key: const Key('home-rail-toggle'),
+            icon: Icon(
+              isExpanded ? Icons.menu_open_rounded : Icons.menu_rounded,
+            ),
+            onPressed: () {
+              setState(() => _sidebarExpandedOverride = !isExpanded);
+            },
+          ),
+        ),
+      ),
+      onDestinationSelected: _selectDestination,
+      destinations: _items
+          .map(
+            (item) => NavigationRailDestination(
+              icon: Tooltip(
+                message: item.label,
+                child: Icon(item.unselectedIcon),
+              ),
+              selectedIcon: Tooltip(
+                message: item.label,
+                child: Icon(item.selectedIcon),
+              ),
+              label: Text(item.label),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isCompact = screenWidth < _compactBreakpoint;
+    final isExpandedByDefault = screenWidth >= _expandedSidebarBreakpoint;
+    final isRailExpanded = _sidebarExpandedOverride ?? isExpandedByDefault;
+    final theme = Theme.of(context);
+
+    if (_wasCompact == true && !isCompact) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
+          Navigator.of(context).pop();
+        }
+      });
+    }
+    _wasCompact = isCompact;
+
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: theme.colorScheme.surface,
+      drawer: isCompact ? _buildDrawer(context, screenWidth) : null,
+      drawerEnableOpenDragGesture: isCompact,
+      body: isCompact
+          ? _buildBody(onOpenNavigation: _openNavigation)
+          : Row(
+              children: [
+                _buildRail(context, isRailExpanded),
+                const VerticalDivider(width: 1),
+                Expanded(child: _buildBody()),
+              ],
+            ),
+    );
+  }
 }
 
-class _SidebarItem {
+class _NavigationItem {
   final IconData unselectedIcon;
   final IconData selectedIcon;
   final String label;
 
-  const _SidebarItem(this.unselectedIcon, this.selectedIcon, this.label);
+  const _NavigationItem(this.unselectedIcon, this.selectedIcon, this.label);
 }
 
 class _AuthRequiredPlaceholder extends StatelessWidget {
   final String title;
   final String description;
   final VoidCallback onLoginSuccess;
+  final VoidCallback? onOpenNavigation;
 
   const _AuthRequiredPlaceholder({
     required this.title,
     required this.description,
     required this.onLoginSuccess,
+    this.onOpenNavigation,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return SafeArea(
-      child: Padding(
+    return Scaffold(
+      appBar: AppBar(
+        leading: onOpenNavigation == null
+            ? null
+            : IconButton(
+                key: const Key('home-appbar-menu-button'),
+                tooltip: tr(
+                  context,
+                  vi: 'Mở menu điều hướng',
+                  en: 'Open navigation menu',
+                ),
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: onOpenNavigation,
+              ),
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+      body: Padding(
         padding: const EdgeInsets.all(32.0),
         child: Center(
           child: ConstrainedBox(

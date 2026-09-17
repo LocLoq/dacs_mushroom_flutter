@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/home_screen.dart';
 import '../../../app/theme/app_colors.dart';
+import '../../../core/localization/app_text_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/local_session.dart';
 import '../../../core/widgets/status_chip.dart';
@@ -9,7 +10,9 @@ import '../data/account_model.dart';
 import 'account_edit_sheet.dart';
 
 class AccountListScreen extends StatefulWidget {
-  const AccountListScreen({super.key});
+  final VoidCallback? onOpenNavigation;
+
+  const AccountListScreen({super.key, this.onOpenNavigation});
 
   @override
   State<AccountListScreen> createState() => _AccountListScreenState();
@@ -141,7 +144,23 @@ class _AccountListScreenState extends State<AccountListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Quản lý tài khoản'),
+        leading: widget.onOpenNavigation == null
+            ? null
+            : IconButton(
+                key: const Key('home-appbar-menu-button'),
+                tooltip: tr(
+                  context,
+                  vi: 'Mở menu điều hướng',
+                  en: 'Open navigation menu',
+                ),
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: widget.onOpenNavigation,
+              ),
+        title: const Text(
+          'Quản lý tài khoản',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),

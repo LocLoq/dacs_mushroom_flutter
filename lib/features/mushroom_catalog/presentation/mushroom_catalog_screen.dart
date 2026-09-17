@@ -6,7 +6,9 @@ import '../../../core/services/backend_queue_service.dart';
 import '../data/catalog_model.dart';
 
 class MushroomCatalogScreen extends StatefulWidget {
-  const MushroomCatalogScreen({super.key});
+  final VoidCallback? onOpenNavigation;
+
+  const MushroomCatalogScreen({super.key, this.onOpenNavigation});
 
   @override
   State<MushroomCatalogScreen> createState() => _MushroomCatalogScreenState();
@@ -173,8 +175,22 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: widget.onOpenNavigation == null
+            ? null
+            : IconButton(
+                key: const Key('home-appbar-menu-button'),
+                tooltip: tr(
+                  context,
+                  vi: 'Mở menu điều hướng',
+                  en: 'Open navigation menu',
+                ),
+                icon: const Icon(Icons.menu_rounded),
+                onPressed: widget.onOpenNavigation,
+              ),
         title: Text(
           tr(context, vi: 'Từ Điển & Danh Mục Nấm', en: 'Mushroom Catalog'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         actions: [
           IconButton(
@@ -408,4 +424,3 @@ class _StatCard extends StatelessWidget {
     );
   }
 }
-
