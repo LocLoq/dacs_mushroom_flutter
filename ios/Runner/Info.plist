@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Thu</string>
+	<string>Quản lý Sản xuất &amp; Nhận diện Nấm</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,13 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>thu</string>
+	<string>Quản lý Nấm</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Cho phép chụp ảnh nấm để nhận diện.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Cho phép chọn ảnh nấm để nhận diện.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Cho phép kết nối máy chủ phát triển trong mạng nội bộ.</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

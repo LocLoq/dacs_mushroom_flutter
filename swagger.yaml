@@ -1,0 +1,1231 @@
+openapi: 3.0.0
+info:
+  title: API Quản lý Nông Trại Nấm
+  version: 1.0.0
+  description: Tài liệu API cho Hệ thống Quản lý Nuôi trồng Nấm
+servers:
+  - url: http://localhost:8080
+    description: Máy chủ cục bộ (Local Server)
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Mushroom:
+      type: object
+      properties:
+        scientificName:
+          type: string
+        commonName:
+          type: string
+        otherNames:
+          type: string
+        family:
+          type: string
+        genus:
+          type: string
+        capDescription:
+          type: string
+        gillsDescription:
+          type: string
+        stemDescription:
+          type: string
+        sporePrintColor:
+          type: string
+        bruisingBehavior:
+          type: string
+        ecologyType:
+          type: string
+          enum: [SAPROBIC, MYCORRHIZAL, PARASITIC]
+        habitat:
+          type: string
+        fruitingSeason:
+          type: string
+        edibilityStatus:
+          type: string
+          enum: [CHOICE, EDIBLE, INEDIBLE, POISONOUS, DEADLY]
+        toxicitySymptoms:
+          type: string
+        medicinalProperties:
+          type: string
+        cultivationDifficulty:
+          type: string
+          enum: [EASY, MEDIUM, HARD, UNCULTIVABLE]
+        imageUrl:
+          type: string
+    ProductionFacility:
+      type: object
+      properties:
+        name:
+          type: string
+        taxCode:
+          type: string
+        address:
+          type: string
+        province:
+          type: string
+        contactPhone:
+          type: string
+        contactEmail:
+          type: string
+        facilityType:
+          type: string
+          enum: [HOUSEHOLD, COOPERATIVE, ENTERPRISE]
+        capacityTonsPerYear:
+          type: number
+        totalAreaSqm:
+          type: number
+        certifications:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED, CLOSED]
+        mushrooms:
+          type: array
+          items:
+            type: integer
+    CultivationBatch:
+      type: object
+      properties:
+        batchCode:
+          type: string
+        facilityId:
+          type: integer
+        mushroomId:
+          type: integer
+        status:
+          type: string
+          enum: [PREPARATION, INCUBATION, FRUITING, HARVESTING, COMPLETED, FAILED]
+        substrateType:
+          type: string
+        spawnSource:
+          type: string
+        bagQuantity:
+          type: integer
+        startDate:
+          type: string
+          format: date-time
+        expectedHarvestDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        actualYieldKg:
+          type: number
+        defectRate:
+          type: number
+        notes:
+          type: string
+    CultivationCareLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        batchId:
+          type: integer
+        actionType:
+          type: string
+        notes:
+          type: string
+        recordedAt:
+          type: string
+          format: date-time
+    GrowthProgressRecord:
+      type: object
+      required: [id, batchId, stage, notes, recordedAt, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        batchId:
+          type: integer
+          readOnly: true
+        stage:
+          type: string
+        notes:
+          type: string
+        recordedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/GrowthProgressImage'
+    GrowthProgressImage:
+      type: object
+      required: [id, growthProgressId, imageUrl, originalName, mimeType, fileSize, createdAt]
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        growthProgressId:
+          type: integer
+          readOnly: true
+        imageUrl:
+          type: string
+          description: Duong dan cong khai cua anh thuc te
+        originalName:
+          type: string
+        mimeType:
+          type: string
+          example: image/jpeg
+        fileSize:
+          type: integer
+          description: Kich thuoc tep tinh bang byte
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+    ErrorResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        error:
+          type: string
+    ClassifierLookup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [QUEUED, PROCESSING, SUCCEEDED, FAILED]
+        originalName:
+          type: string
+        mimeType:
+          type: string
+        fileSize:
+          type: integer
+        predictedName:
+          type: string
+          nullable: true
+        edibility:
+          type: string
+          nullable: true
+        confidence:
+          type: number
+          nullable: true
+        result:
+          type: object
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        actorUsername:
+          type: string
+          nullable: true
+        actorRole:
+          type: string
+          nullable: true
+        action:
+          type: string
+        entityType:
+          type: string
+          nullable: true
+        entityId:
+          type: string
+          nullable: true
+        method:
+          type: string
+        path:
+          type: string
+        statusCode:
+          type: integer
+        outcome:
+          type: string
+          enum: [SUCCESS, FAILURE]
+        createdAt:
+          type: string
+          format: date-time
+    HarvestRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        batchId:
+          type: integer
+        harvestedAt:
+          type: string
+          format: date-time
+        totalYieldKg:
+          type: number
+        qualityGrade:
+          type: string
+        notes:
+          type: string
+  parameters:
+    ReportFrom:
+      name: from
+      in: query
+      schema: { type: string, format: date }
+      description: Ngày bắt đầu, mặc định là đầu năm hiện tại
+    ReportTo:
+      name: to
+      in: query
+      schema: { type: string, format: date }
+      description: Ngày kết thúc, mặc định là hôm nay
+    FacilityId:
+      name: facilityId
+      in: query
+      schema: { type: integer }
+    MushroomId:
+      name: mushroomId
+      in: query
+      schema: { type: integer }
+    GroupBy:
+      name: groupBy
+      in: query
+      schema: { type: string, enum: [day, month], default: month }
+security:
+  - bearerAuth: []
+paths:
+  /api/login:
+    post:
+      summary: Đăng nhập vào hệ thống
+      tags: [Xác thực]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, full_name, phone_number, email, role_id]
+              properties:
+                username:
+                  type: string
+                  description: Tên đăng nhập
+                password:
+                  type: string
+                  description: Mật khẩu
+      responses:
+        '200':
+          description: Đăng nhập thành công, trả về JWT token
+        '401':
+          description: Tên đăng nhập hoặc mật khẩu không chính xác
+  
+  /api/mushroom-classifier/classify:
+    post:
+      summary: Tải ảnh nấm lên để AI phân loại
+      tags: [Phân loại Nấm]
+      security: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: File hình ảnh của nấm cần phân loại
+      responses:
+        '202':
+          description: Đã tiếp nhận yêu cầu phân loại
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: QUEUED
+          
+  /api/mushroom-classifier/history:
+    get:
+      summary: Xem lịch sử tra cứu mushroom classifier
+      tags: [Phân loại Nấm]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string, enum: [QUEUED, PROCESSING, SUCCEEDED, FAILED] }
+        - name: predictedName
+          in: query
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Danh sách lượt tra cứu
+  /api/mushroom-classifier/history/{id}:
+    get:
+      summary: Xem chi tiết một lượt tra cứu classifier
+      tags: [Phân loại Nấm]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Chi tiết lượt tra cứu
+  /api/admin/audit-logs:
+    get:
+      summary: Xem audit log quản trị
+      tags: [Quản trị viên]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: actorUserId
+          in: query
+          schema: { type: integer }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: outcome
+          in: query
+          schema: { type: string, enum: [SUCCESS, FAILURE] }
+      responses:
+        '200':
+          description: Danh sách audit log
+  /api/reports/overview:
+    get:
+      summary: Xem thống kê tổng hợp hệ thống
+      tags: [Báo cáo]
+      parameters:
+        - $ref: '#/components/parameters/ReportFrom'
+        - $ref: '#/components/parameters/ReportTo'
+        - $ref: '#/components/parameters/FacilityId'
+        - $ref: '#/components/parameters/MushroomId'
+        - $ref: '#/components/parameters/GroupBy'
+      responses:
+        '200': { description: Thống kê tổng hợp }
+  /api/reports/cultivation:
+    get:
+      summary: Xem báo cáo lô nuôi trồng
+      tags: [Báo cáo]
+      responses:
+        '200': { description: Báo cáo nuôi trồng có phân trang }
+  /api/reports/classifier:
+    get:
+      summary: Xem báo cáo classifier
+      tags: [Báo cáo]
+      responses:
+        '200': { description: Báo cáo classifier có phân trang }
+  /api/reports/audit:
+    get:
+      summary: Xem báo cáo hoạt động audit
+      tags: [Báo cáo]
+      responses:
+        '200': { description: Báo cáo audit có phân trang }
+  /api/reports/{type}/export:
+    get:
+      summary: Xuất báo cáo CSV, XLSX hoặc PDF
+      tags: [Báo cáo]
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema: { type: string, enum: [overview, cultivation, classifier, audit] }
+        - name: format
+          in: query
+          required: true
+          schema: { type: string, enum: [csv, xlsx, pdf] }
+      responses:
+        '200':
+          description: File báo cáo
+          content:
+            text/csv: {}
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {}
+            application/pdf: {}
+        '422': { description: Báo cáo quá lớn, cần thu hẹp bộ lọc }
+  /api/public/cultivation-batches/{batchCode}/growth-progress/current:
+    get:
+      summary: Xem tiến trình sinh trưởng hiện tại công khai
+      tags: [Tiến trình công khai]
+      security: []
+      parameters:
+        - name: batchCode
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Tiến trình hiện tại hoặc null nếu chưa có dữ liệu }
+        '404': { description: Không tìm thấy lô }
+
+  /api/admin/users:
+    get:
+      summary: Lấy danh sách tài khoản người dùng
+      tags: [Quản trị viên]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+          description: Số trang hiện tại (mặc định 1)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+          description: Số lượng item trên một trang (tối đa 50)
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Tìm kiếm theo tên đăng nhập hoặc họ tên
+      responses:
+        '200':
+          description: Danh sách người dùng (kèm phân trang)
+    post:
+      summary: Tạo tài khoản người dùng mới
+      tags: [Quản trị viên]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  description: Tên đăng nhập
+                password:
+                  type: string
+                  description: Mật khẩu (sẽ được mã hóa)
+                full_name:
+                  type: string
+                  description: Họ và tên đầy đủ
+                phone_number:
+                  type: string
+                  description: Số điện thoại liên hệ
+                email:
+                  type: string
+                  format: email
+                  description: Email liên hệ
+                role_id:
+                  type: integer
+                  description: ID của quyền hạn (Role ID)
+      responses:
+        '201':
+          description: Tài khoản đã được tạo thành công
+        '400':
+          description: Dữ liệu không hợp lệ hoặc username đã tồn tại
+  
+  /api/admin/users/{id}:
+    put:
+      summary: Cập nhật thông tin tài khoản
+      tags: [Quản trị viên]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của người dùng
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                  description: Mật khẩu mới (bỏ trống nếu không muốn đổi)
+                full_name:
+                  type: string
+                  description: Họ và tên mới
+                phone_number:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                role_id:
+                  type: integer
+                  description: ID quyền hạn mới
+      responses:
+        '200':
+          description: Cập nhật tài khoản thành công
+    delete:
+      summary: Xóa tài khoản người dùng
+      tags: [Quản trị viên]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của người dùng cần xóa
+      responses:
+        '200':
+          description: Xóa tài khoản thành công
+
+  /api/admin/roles:
+    get:
+      summary: Lấy danh sách các quyền (Roles)
+      tags: [Quản trị viên]
+      responses:
+        '200':
+          description: Danh sách các quyền có trong hệ thống (admin, manager, staff)
+
+  /api/mushroom-species:
+    get:
+      summary: Lấy danh sách giống nấm
+      tags: [Quản lý Giống Nấm]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Tìm kiếm theo tên khoa học, tên thường gọi, họ, chi
+      responses:
+        '200':
+          description: Danh sách các giống nấm (kèm phân trang)
+    post:
+      summary: Thêm giống nấm mới
+      tags: [Quản lý Giống Nấm]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Mushroom'
+      responses:
+        '201':
+          description: Thêm giống nấm thành công
+  
+  /api/mushroom-species/{id}:
+    put:
+      summary: Cập nhật thông tin giống nấm
+      tags: [Quản lý Giống Nấm]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của giống nấm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              $ref: '#/components/schemas/Mushroom'
+      responses:
+        '200':
+          description: Cập nhật thông tin thành công
+    delete:
+      summary: Xóa một giống nấm
+      tags: [Quản lý Giống Nấm]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của giống nấm cần xóa
+      responses:
+        '200':
+          description: Xóa giống nấm thành công
+
+  /api/production-facilities:
+    get:
+      summary: Lấy danh sách cơ sở sản xuất
+      tags: [Quản lý Cơ Sở Sản Xuất]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Tìm kiếm theo tên cơ sở, địa chỉ, mã số thuế
+      responses:
+        '200':
+          description: Danh sách cơ sở sản xuất (kèm theo các giống nấm đang trồng)
+    post:
+      summary: Thêm cơ sở sản xuất mới
+      tags: [Quản lý Cơ Sở Sản Xuất]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Tên cơ sở
+                taxCode:
+                  type: string
+                  description: Mã số thuế
+                address:
+                  type: string
+                  description: Địa chỉ
+                facilityType:
+                  type: string
+                  description: Loại hình cơ sở (HOUSEHOLD, COOPERATIVE, ENTERPRISE)
+                status:
+                  type: string
+                  description: Trạng thái (ACTIVE, SUSPENDED, CLOSED)
+                mushrooms:
+                  type: array
+                  description: Danh sách các ID giống nấm đang được trồng tại cơ sở này
+                  items:
+                    type: integer
+              $ref: '#/components/schemas/ProductionFacility'
+      responses:
+        '201':
+          description: Tạo cơ sở thành công
+  
+  /api/production-facilities/{id}:
+    get:
+      summary: Lấy chi tiết một cơ sở sản xuất
+      tags: [Quản lý Cơ Sở Sản Xuất]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của cơ sở sản xuất
+      responses:
+        '200':
+          description: Thông tin chi tiết của cơ sở
+    put:
+      summary: Cập nhật thông tin cơ sở sản xuất
+      tags: [Quản lý Cơ Sở Sản Xuất]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của cơ sở sản xuất
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mushrooms:
+                  type: array
+                  description: Danh sách các ID giống nấm đang được trồng tại cơ sở này (Ghi đè lại)
+                  items:
+                    type: integer
+              $ref: '#/components/schemas/ProductionFacility'
+      responses:
+        '200':
+          description: Cập nhật thành công
+    delete:
+      summary: Xóa cơ sở sản xuất
+      tags: [Quản lý Cơ Sở Sản Xuất]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của cơ sở sản xuất cần xóa
+      responses:
+        '200':
+          description: Xóa cơ sở thành công
+
+  /api/cultivation-batches:
+    get:
+      summary: Lấy danh sách lô nuôi trồng
+      tags: [Quản lý Lô Nuôi Trồng]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Tìm kiếm theo mã lô (batchCode)
+        - name: facilityId
+          in: query
+          schema:
+            type: integer
+          description: Lọc theo cơ sở sản xuất
+        - name: mushroomId
+          in: query
+          schema:
+            type: integer
+          description: Lọc theo giống nấm
+        - name: status
+          in: query
+          schema:
+            type: string
+          description: Lọc theo trạng thái của lô
+      responses:
+        '200':
+          description: Danh sách các lô nuôi trồng
+    post:
+      summary: Tạo lô nuôi trồng mới
+      tags: [Quản lý Lô Nuôi Trồng]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                batchCode:
+                  type: string
+                  description: Mã lô nuôi trồng (Độc nhất)
+                facilityId:
+                  type: integer
+                  description: ID cơ sở sản xuất
+                mushroomId:
+                  type: integer
+                  description: ID giống nấm
+                startDate:
+                  type: string
+                  format: date-time
+                  description: Ngày bắt đầu (chuỗi định dạng ISO)
+              $ref: '#/components/schemas/CultivationBatch'
+      responses:
+        '201':
+          description: Thêm lô nuôi trồng thành công
+  
+  /api/cultivation-batches/{id}:
+    get:
+      summary: Lấy chi tiết lô nuôi trồng
+      tags: [Quản lý Lô Nuôi Trồng]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của lô nuôi trồng
+      responses:
+        '200':
+          description: Thông tin chi tiết của lô
+    put:
+      summary: Cập nhật thông tin lô nuôi trồng
+      tags: [Quản lý Lô Nuôi Trồng]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của lô nuôi trồng
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              $ref: '#/components/schemas/CultivationBatch'
+      responses:
+        '200':
+          description: Cập nhật thành công
+    delete:
+      summary: Xóa lô nuôi trồng
+      tags: [Quản lý Lô Nuôi Trồng]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của lô nuôi trồng cần xóa
+      responses:
+        '200':
+          description: Xóa lô thành công
+
+  /api/cultivation-batches/{id}/care-logs:
+    get:
+      summary: Lấy nhật ký chấm sóc của lô nuôi trồng
+      tags: [Quản lý Lô Nuôi Trồng]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của lô nuôi trồng
+      responses:
+        '200':
+          description: Danh sách nhật ký chấm sóc
+    post:
+      summary: Ghi nhật ký chấm sóc cho lô nuôi trồng
+      tags: [Quản lý Lô Nuôi Trồng]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của lô nuôi trồng
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                actionType:
+                  type: string
+                  description: Loại hành động chấm sóc
+                notes:
+                  type: string
+                  description: Ghi chú chi tiết
+                recordedAt:
+                  type: string
+                  format: date-time
+                  description: Thời điểm ghi nhật ký
+      responses:
+        '201':
+          description: Ghi nhật ký chấm sóc thành công
+
+  /api/cultivation-batches/{id}/growth-progress:
+    get:
+      summary: Lấy tiến độ phát triển của lô nuôi trồng
+      tags: [Quản lý Lô Nuôi Trồng]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của lô nuôi trồng
+      responses:
+        '200':
+          description: Danh sách tiến độ sinh trưởng
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GrowthProgressRecord'
+        '400':
+          description: ID lô nuôi trồng không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Chưa cung cấp token xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Token không hợp lệ, hết hạn hoặc không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Không tìm thấy lô nuôi trồng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Lỗi máy chủ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Cập nhật tiến độ sinh trưởng của lô
+      tags: [Quản lý Lô Nuôi Trồng]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của lô nuôi trồng
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stage, notes]
+              additionalProperties: false
+              properties:
+                stage:
+                  type: string
+                  description: Giai đoạn sinh trưởng
+                notes:
+                  type: string
+                  description: Mô tả chi tiết
+                recordedAt:
+                  type: string
+                  format: date-time
+                  description: Thời điểm ghi nhận
+          multipart/form-data:
+            schema:
+              type: object
+              required: [stage, notes]
+              additionalProperties: false
+              properties:
+                stage:
+                  type: string
+                notes:
+                  type: string
+                recordedAt:
+                  type: string
+                  format: date-time
+                images:
+                  type: array
+                  description: Tối đa 5 ảnh JPEG, PNG hoặc WebP, mỗi ảnh không quá 5 MB
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '201':
+          description: Cập nhật tiến độ sinh trưởng thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, data]
+                properties:
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/GrowthProgressRecord'
+        '400':
+          description: ID lô, dữ liệu hoặc thời điểm ghi nhận không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Chưa cung cấp token xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Token không hợp lệ, hết hạn hoặc không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Không tìm thấy lô nuôi trồng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Lỗi máy chủ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/cultivation-batches/{id}/growth-progress/{recordId}:
+    patch:
+      summary: Cập nhật một bản ghi tiến độ sinh trưởng
+      tags: [Quản lý Lô Nuôi Trồng]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của lô nuôi trồng
+        - name: recordId
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của bản ghi tiến độ sinh trưởng
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                stage:
+                  type: string
+                  description: Giai đoạn sinh trưởng mới
+                notes:
+                  type: string
+                  description: Mô tả chi tiết mới
+                recordedAt:
+                  type: string
+                  format: date-time
+                  description: Thời điểm ghi nhận mới
+          multipart/form-data:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                stage:
+                  type: string
+                notes:
+                  type: string
+                recordedAt:
+                  type: string
+                  format: date-time
+                images:
+                  type: array
+                  description: Ảnh mới được thêm vào bản ghi hiện có; tối đa 5 ảnh mỗi lần
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '200':
+          description: Cập nhật bản ghi tiến độ sinh trưởng thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, data]
+                properties:
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/GrowthProgressRecord'
+        '400':
+          description: ID, dữ liệu hoặc thời điểm ghi nhận không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Chưa cung cấp token xác thực
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Token không hợp lệ, hết hạn hoặc không đủ quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Không tìm thấy lô nuôi trồng hoặc bản ghi tiến độ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Lỗi máy chủ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/cultivation-batches/{id}/harvests:
+    get:
+      summary: Lấy nhật ký thu hoạch của lô nuôi trồng
+      tags: [Quản lý Lô Nuôi Trồng]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của lô nuôi trồng
+      responses:
+        '200':
+          description: Danh sách các lần thu hoạch
+    post:
+      summary: Ghi nhận kết quả thu hoạch cho lô nuôi trồng
+      tags: [Quản lý Lô Nuôi Trồng]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID của lô nuôi trồng
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                totalYieldKg:
+                  type: number
+                  description: Tổng sản lượng thu hoạch (kg)
+                qualityGrade:
+                  type: string
+                  description: Chất lượng sản phẩm
+                notes:
+                  type: string
+                  description: Ghi chú
+                harvestedAt:
+                  type: string
+                  format: date-time
+                  description: Thời điểm thu hoạch
+                finalizeBatch:
+                  type: boolean
+                  description: Có đánh dấu lô đã hoàn tất hay không
+      responses:
+        '201':
+          description: Ghi nhận thu hoạch thành công
