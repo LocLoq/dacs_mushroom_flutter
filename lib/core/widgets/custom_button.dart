@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../app/theme/app_colors.dart';
-
 class CustomButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
@@ -19,24 +17,26 @@ class CustomButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 48,
-      child: ElevatedButton(
+      height: 54,
+      child: FilledButton(
         onPressed: loading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
         child: loading
-            ? const SizedBox(
-                width: 22, height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+            ? SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: Theme.of(context).colorScheme.onPrimary,
+                ),
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (icon != null) ...[Icon(icon, size: 18), const SizedBox(width: 8)],
-                  Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  if (icon != null) ...[
+                    Icon(icon, size: 20),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(label),
                 ],
               ),
       ),

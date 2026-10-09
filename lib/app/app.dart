@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/localization/app_language.dart';
 import '../core/localization/app_text_scope.dart';
+import '../core/network/farm_api.dart';
 import '../core/services/app_preferences_service.dart';
 import 'home_screen.dart';
 import 'theme/app_theme.dart';
@@ -26,6 +29,8 @@ class _MushroomAppState extends State<MushroomApp> {
   }
 
   Future<void> _bootstrap() async {
+    // Đọc token đã lưu rồi GET /auth/me ở nền; không chặn màn hình khởi động.
+    unawaited(FarmApi.instance.restoreSession().catchError((Object _) {}));
     try {
       final config = await _prefs.load();
       if (mounted) {
@@ -64,6 +69,8 @@ class _MushroomAppState extends State<MushroomApp> {
     return AppTextScope(
       language: _language,
       onLanguageChanged: updateLanguage,
+      darkMode: _darkMode,
+      onThemeModeChanged: updateTheme,
       child: MaterialApp(
         title: _language == AppLanguage.en
             ? 'Mushroom Management & AI Recognizer'
