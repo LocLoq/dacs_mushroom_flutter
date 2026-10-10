@@ -2,24 +2,29 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../app/config/app_constants.dart';
 import '../localization/app_language.dart';
 import '../models/app_config.dart';
+import '../network/api_config.dart';
+import '../storage/local_session.dart';
 
 class AppPreferencesService {
   static AppPreferencesService? _instance;
-  static AppPreferencesService get instance => _instance ??= AppPreferencesService();
+  static AppPreferencesService get instance =>
+      _instance ??= AppPreferencesService();
 
   SharedPreferences? _prefs;
 
   Future<void> init() async {
-    _prefs ??= await SharedPreferences.getInstance();
+    _prefs = await SharedPreferences.getInstance();
   }
 
   Future<AppConfig> load() async {
     await init();
-    final url = _prefs!.getString(AppConstants.prefBackendBaseUrl) ??
+    final url =
+        _prefs!.getString(AppConstants.prefBackendBaseUrl) ??
         AppConstants.kDefaultBackendBaseUrl;
     final darkMode = _prefs!.getBool(AppConstants.prefDarkMode) ?? false;
     final langCode = _prefs!.getString(AppConstants.prefLanguageCode) ?? 'vi';
-    final configured = _prefs!.getBool(AppConstants.prefBackendConfigured) ?? false;
+    final configured =
+        _prefs!.getBool(AppConstants.prefBackendConfigured) ?? false;
 
     return AppConfig(
       backendBaseUrl: url,
@@ -31,7 +36,17 @@ class AppPreferencesService {
 
   Future<void> saveBackendBaseUrl(String value) async {
     await init();
-    await _prefs!.setString(AppConstants.prefBackendBaseUrl, value.trim());
+    final config = ApiConfig.fromInput(value);
+    final previous =
+        _prefs!.getString(AppConstants.prefBackendBaseUrl) ??
+        AppConstants.kDefaultBackendBaseUrl;
+    if (ApiConfig.fromInput(previous).serverOrigin != config.serverOrigin)
+      await LocalSession.logout();
+    await _prefs!.setString(
+      AppConstants.prefBackendBaseUrl,
+      config.serverOrigin.toString(),
+    );
+    ApiConfig.useServer(config.serverOrigin.toString());
   }
 
   Future<void> saveDarkMode(bool enabled) async {
@@ -54,4 +69,3 @@ class AppPreferencesService {
     await _prefs!.setBool(AppConstants.prefBackendConfigured, true);
   }
 }
-

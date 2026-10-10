@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/localization/app_text_scope.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/widgets/api_error_view.dart';
+import '../../../core/storage/local_session.dart';
 import '../data/strain_model.dart';
 import 'strain_form_sheet.dart';
 
@@ -19,6 +21,7 @@ class _StrainListScreenState extends State<StrainListScreen> {
   final _api = ApiClient();
   List<StrainModel> _strains = [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -27,22 +30,33 @@ class _StrainListScreenState extends State<StrainListScreen> {
   }
 
   Future<void> _load() async {
-    // TODO(BACKEND): strain_controller -> strain_repository -> ApiClient.fetchStrains
-    final data = await _api.fetchStrains();
-    setState(() { _strains = data; _loading = false; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final data = await _api.fetchStrains();
+      if (mounted) setState(() => _strains = data);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   void _openForm({StrainModel? existing}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (_) => StrainFormSheet(
         existing: existing,
         onSave: (strain) async {
           // TODO(BACKEND): ApiClient.saveStrain(strain) -> reload list
           await _api.saveStrain(strain);
-          Navigator.pop(context);
+          if (context.mounted) Navigator.pop(context);
           _load();
         },
       ),
@@ -71,56 +85,80 @@ class _StrainListScreenState extends State<StrainListScreen> {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _openForm(),
-        backgroundColor: AppColors.primary,
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+      floatingActionButton: !LocalSession.canManage
+          ? null
+          : FloatingActionButton(
+              onPressed: () => _openForm(),
+              backgroundColor: AppColors.primary,
+              child: const Icon(Icons.add, color: Colors.white),
+            ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _strains.length,
-              itemBuilder: (context, i) {
-                final s = _strains[i];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(s.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            IconButton(
-                              icon: const Icon(Icons.edit, size: 20, color: AppColors.textSecondary),
-                              onPressed: () => _openForm(existing: s),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8, runSpacing: 8,
-                          children: [
-                            _paramTag('🌡 ${s.tempMin.toStringAsFixed(0)}–${s.tempMax.toStringAsFixed(0)}°C'),
-                            _paramTag('💧 ${s.humidityMin.toStringAsFixed(0)}–${s.humidityMax.toStringAsFixed(0)}%'),
-                            _paramTag('🫧 CO₂ ${s.co2Min.toStringAsFixed(0)}–${s.co2Max.toStringAsFixed(0)}ppm'),
-                          ],
-                        ),
-                      ],
+          : _error != null
+          ? ApiErrorView(message: _error!, onRetry: _load)
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _strains.length,
+                itemBuilder: (context, i) {
+                  final s = _strains[i];
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  s.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                              if (LocalSession.canManage)
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.edit,
+                                    size: 20,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  onPressed: () => _openForm(existing: s),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _paramTag(s.scientificName),
+                              _paramTag('Họ: ' + s.family),
+                              _paramTag(s.edibilityStatus),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
     );
   }
 
   Widget _paramTag(String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(8)),
-        child: Text(text, style: const TextStyle(fontSize: 12)),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: AppColors.background,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Text(text, style: const TextStyle(fontSize: 12)),
+  );
 }

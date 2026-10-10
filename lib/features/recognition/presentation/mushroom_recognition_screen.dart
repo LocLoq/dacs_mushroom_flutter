@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/localization/app_text_scope.dart';
 import '../../../core/services/backend_queue_service.dart';
+import '../../../core/network/mock_config.dart';
 import '../../../core/services/frame_selector_service.dart';
 import '../../../core/widgets/mushroom_glyph.dart';
 import '../../../core/widgets/soft_card.dart';
@@ -146,6 +147,7 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
     setState(() => _isUploading = true);
     try {
       final jobId = await _queue.enqueue(_preparedFrame!);
+      if(!mounted) return;
       _popupEligibleJobIds.add(jobId);
       setState(() {
         _isUploading = false;
@@ -167,6 +169,7 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
         );
       }
     } catch (e) {
+      if(!mounted) return;
       setState(() => _isUploading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -195,6 +198,7 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
+          if(MockConfig.enabled) const Padding(padding:EdgeInsets.only(bottom:12),child:Text('DỮ LIỆU MẪU — kết quả chỉ minh họa giao diện.')),
           // ── Tiêu đề + trạng thái kết nối ──
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,

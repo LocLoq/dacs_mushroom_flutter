@@ -1,81 +1,88 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Trạng thái phiên (specs/S01_LOGIN.md):
-///  - guest: chưa đăng nhập
-///  - pending: có token nhưng chưa xác nhận được profile (mất mạng/503)
-///  - signedIn: GET /auth/me hợp lệ, role là admin|manager|staff
+class TokenStore {
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  Future<Map<String, dynamic>?> read() async {
+    final value = await _storage.read(key: 'mushroom_auth_session');
+    return value == null
+        ? null
+        : Map<String, dynamic>.from(jsonDecode(value) as Map);
+  }
+
+  Future<void> write(String token, String serverOrigin) => _storage.write(
+    key: 'mushroom_auth_session',
+    value: jsonEncode({'token': token, 'server': serverOrigin}),
+  );
+  Future<void> clear() => _storage.delete(key: 'mushroom_auth_session');
+}
+
 enum SessionStatus { guest, pending, signedIn }
 
 class LocalSession {
-  static const _tokenKey = 'farm_token';
-  static const _roles = {'admin', 'manager', 'staff'};
-
-  static String? _token;
+  static final changes = ValueNotifier<int>(0);
+  static final store = TokenStore();
+  static String? _token, _serverOrigin;
   static Map<String, dynamic>? _user;
-  static SessionStatus _status = SessionStatus.guest;
+  static void save(
+    String token,
+    Map<String, dynamic> user, {
+    String? serverOrigin,
+  }) {
+    _token = token;
+    _user = Map<String, dynamic>.from(user);
+    _serverOrigin = serverOrigin;
+    changes.value++;
+  }
 
-  /// UI lắng nghe để vẽ lại khi đăng nhập/đăng xuất/hết phiên.
-  static final ValueNotifier<int> changes = ValueNotifier<int>(0);
+  static String? tokenFor(String serverOrigin) =>
+      _serverOrigin == serverOrigin ? _token : null;
+  static Map<String, dynamic>? get user =>
+      _user == null ? null : Map<String, dynamic>.from(_user!);
+  static void setMockToken(String value) {
+    _token = value;
+    _serverOrigin = 'mock';
+    _user = null;
+    changes.value++;
+  }
 
   static String? get token => _token;
-  static SessionStatus get status => _status;
-  static bool get isLoggedIn => _status == SessionStatus.signedIn;
-  static bool get isPending => _status == SessionStatus.pending;
-
-  static int? get userId => _user?['id'] is int ? _user!['id'] as int : null;
-  static String get username => (_user?['username'] ?? '').toString();
-  static String get fullName => (_user?['full_name'] ?? '').toString();
-  static String get role => (_user?['role'] ?? '').toString();
-  static String get displayName => fullName.isNotEmpty ? fullName : username;
-
-  static bool get isAdmin => isLoggedIn && role == 'admin';
-  static bool get canManage => isLoggedIn && (role == 'admin' || role == 'manager');
-
-  static void _notify() => changes.value++;
-
-  /// Đọc token đã lưu (chưa gọi mạng).
-  static Future<void> loadToken() async {
-    final p = await SharedPreferences.getInstance();
-    _token = p.getString(_tokenKey);
-    _status = _token == null ? SessionStatus.guest : SessionStatus.pending;
-    _notify();
-  }
-
-  static Future<void> setToken(String token) async {
-    _token = token;
-    _status = SessionStatus.pending;
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_tokenKey, token);
-    _notify();
-  }
-
-  /// Chỉ vào khu nội bộ khi profile có id dương, username và role hợp lệ.
-  /// Trả về true nếu hợp lệ.
+  static SessionStatus get status => _token == null
+      ? SessionStatus.guest
+      : _user == null
+      ? SessionStatus.pending
+      : SessionStatus.signedIn;
+  static bool get isPending => status == SessionStatus.pending;
+  static int? get userId => (_user?['id'] as num?)?.toInt();
+  static String get fullName => _user?['full_name']?.toString() ?? '';
+  static String get displayName => fullName.isEmpty ? username : fullName;
   static bool setProfile(Map<String, dynamic> user) {
-    final id = user['id'];
-    final ok = id is int &&
-        id > 0 &&
-        (user['username'] ?? '').toString().isNotEmpty &&
-        _roles.contains(user['role']);
-    if (ok) {
-      _user = user;
-      _status = SessionStatus.signedIn;
-    } else {
-      _user = null;
-      _status = SessionStatus.pending;
-    }
-    _notify();
-    return ok;
+    if (user['id'] is! num ||
+        (user['id'] as num) <= 0 ||
+        !['admin', 'manager', 'staff'].contains(user['role']))
+      return false;
+    _user = Map<String, dynamic>.from(user);
+    changes.value++;
+    return true;
   }
 
-  /// Đăng xuất / hết phiên: xoá token lưu và token trong bộ nhớ.
-  static Future<void> clear() async {
+  static bool get isLoggedIn => status == SessionStatus.signedIn;
+  static String get username => _user?['username']?.toString() ?? '';
+  static String get role => _user?['role']?.toString() ?? '';
+  static bool get canManage => role == 'admin' || role == 'manager';
+  static bool get isAdmin => role == 'admin';
+  static void clear() {
     _token = null;
     _user = null;
-    _status = SessionStatus.guest;
-    final p = await SharedPreferences.getInstance();
-    await p.remove(_tokenKey);
-    _notify();
+    _serverOrigin = null;
+    changes.value++;
+  }
+
+  static Future<void> logout() async {
+    clear();
+    await store.clear();
+    await (await SharedPreferences.getInstance()).remove('farm_mock_token');
   }
 }

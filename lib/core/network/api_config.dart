@@ -1,43 +1,65 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import '../../app/config/app_constants.dart';
+import '../services/app_preferences_service.dart';
+import '../services/backend_queue_service.dart';
 
-/// Địa chỉ API Trại nấm (Node). Khác với "Backend URL" của dịch vụ AI nhận diện
-/// ở màn Cài đặt. Base URL có hậu tố /api, ví dụ http://10.0.2.2:8080/api
 class ApiConfig {
-  static const _key = 'farm_api_base_url';
-  static const defaultBaseUrl = 'http://10.0.2.2:8080/api';
-
-  static String _baseUrl = defaultBaseUrl;
-
-  static String get baseUrl => _baseUrl;
-
-  /// Origin của Node (bỏ /api) — dùng cho ảnh /uploads/... và Socket.IO.
-  static String get origin {
-    var u = _baseUrl.replaceAll(RegExp(r'/+$'), '');
-    if (u.endsWith('/api')) u = u.substring(0, u.length - 4);
-    return u;
-  }
-
+  static String _current = AppConstants.kDefaultBackendBaseUrl;
+  static void useServer(String value) { _current=ApiConfig.fromInput(value).serverOrigin.toString(); }
+  static String get baseUrl =>
+      ApiConfig.fromInput(_current).apiBaseUri.toString();
+  static String get origin =>
+      ApiConfig.fromInput(_current).serverOrigin.toString();
   static Future<void> load() async {
-    final p = await SharedPreferences.getInstance();
-    _baseUrl = p.getString(_key) ?? defaultBaseUrl;
+    _current = (await AppPreferencesService.instance.load()).backendBaseUrl;
   }
 
-  static Future<void> save(String url) async {
-    var u = url.trim().replaceAll(RegExp(r'/+$'), '');
-    if (u.isEmpty) u = defaultBaseUrl;
-    _baseUrl = u;
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_key, u);
+  static Future<void> save(String value) async {
+    await AppPreferencesService.instance.saveBackendBaseUrl(value);
+    _current = ApiConfig.fromInput(value).serverOrigin.toString();
+    BackendQueueService.instance.updateBackendBaseUrl(_current);
+    await BackendQueueService.instance.reconnect(_current);
   }
 
-  /// URL ảnh đầy đủ. /uploads/x.jpg ghép với origin; http(s) giữ nguyên;
-  /// rỗng hoặc scheme khác -> null.
   static String? media(String? raw) {
-    if (raw == null) return null;
-    final u = raw.trim();
-    if (u.isEmpty) return null;
-    if (u.startsWith('http://') || u.startsWith('https://')) return u;
-    if (u.startsWith('/')) return '$origin$u';
-    return null;
+    if (raw == null || raw.trim().isEmpty) return null;
+    final uri = Uri.tryParse(raw.trim());
+    if (uri == null) return null;
+    if (uri.hasScheme && !['http', 'https'].contains(uri.scheme)) return null;
+    return Uri.parse(origin).resolve(raw.trim()).toString();
   }
+
+  ApiConfig._(this.serverOrigin);
+  final Uri serverOrigin;
+  Uri get apiBaseUri => serverOrigin.replace(path: '/api');
+  factory ApiConfig.fromInput(String input) {
+    var text = input.trim();
+    if (text.isEmpty) text = AppConstants.kDefaultBackendBaseUrl;
+    if (!text.contains('://')) text = 'http://$text';
+    final uri = Uri.tryParse(text);
+    if (uri == null ||
+        !uri.hasAuthority ||
+        uri.host.isEmpty ||
+        !['http', 'https'].contains(uri.scheme) ||
+        uri.userInfo.isNotEmpty) {
+      throw const FormatException('Địa chỉ máy chủ không hợp lệ.');
+    }
+    return ApiConfig._(
+      Uri(
+        scheme: uri.scheme,
+        host: uri.host,
+        port: uri.hasPort ? uri.port : null,
+      ),
+    );
+  }
+  Uri endpoint(String path, [Map<String, dynamic>? query]) =>
+      serverOrigin.replace(
+        path: '/api/${path.replaceFirst(RegExp(r'^/+'), '')}',
+        queryParameters: query == null
+            ? null
+            : {
+                for (final entry in query.entries)
+                  if (entry.value != null) entry.key: entry.value.toString(),
+              },
+      );
+  Uri mediaUrl(String value) => serverOrigin.resolve(value);
 }

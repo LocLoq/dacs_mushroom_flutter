@@ -233,7 +233,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     decoration: InputDecoration(
                       labelText: tr(context, vi: 'Địa chỉ Backend URL', en: 'Backend Base URL'),
                       prefixIcon: const Icon(Icons.dns_outlined),
-                      hintText: 'http://10.0.2.2:8000',
+                      hintText: 'http://10.0.2.2:8080',
                     ),
                   ),
                   if (_connecting) ...[

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:thu/app/config/app_constants.dart';
 import 'package:thu/app/home_screen.dart';
+import 'package:thu/app/config/app_constants.dart';
+import 'package:thu/core/services/backend_queue_service.dart';
 import 'package:thu/core/storage/local_session.dart';
 
 void main() {
@@ -12,92 +13,53 @@ void main() {
     });
     LocalSession.clear();
   });
-
+  tearDown(() async {
+    await BackendQueueService.instance.disconnect();
+  });
   Future<void> pumpHome(WidgetTester tester, Size size) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      const MaterialApp(home: HomeScreen(initialIndex: 2)),
-    );
-    await tester.pump();
+    await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+    await BackendQueueService.instance.disconnect();
+    await tester.pumpAndSettle();
   }
 
-  testWidgets('compact layout opens, closes, and selects from the drawer', (
+  testWidgets(
+    'compact layout restores the mushroom hero and five bottom destinations',
+    (tester) async {
+      await pumpHome(tester, const Size(390, 844));
+      expect(find.text('Đây là nấm gì?'), findsOneWidget);
+      expect(find.text('Từ điển'), findsOneWidget);
+      expect(find.text('Lịch sử'), findsOneWidget);
+      expect(find.text('Quản lý'), findsOneWidget);
+      expect(find.text('Cài đặt'), findsOneWidget);
+      expect(find.bySemanticsLabel('Quét'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets('manage tab presents real login then returns to recognition', (
     tester,
   ) async {
     await pumpHome(tester, const Size(390, 844));
-
-    expect(find.byType(NavigationRail), findsNothing);
-    expect(find.byKey(const Key('home-appbar-menu-button')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('home-appbar-menu-button')));
+    await tester.tap(find.text('Quản lý'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('home-navigation-drawer')), findsOneWidget);
-
-    await tester.pageBack();
+    expect(find.text('Quản lý trại nấm'), findsOneWidget);
+    expect(find.text('Đăng nhập để quản lý'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Quét'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('home-navigation-drawer')), findsNothing);
-
-    await tester.tap(find.byKey(const Key('home-appbar-menu-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Giống nấm'));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('home-navigation-drawer')), findsNothing);
-    expect(find.text('Quản Lý Giống Nấm'), findsOneWidget);
+    expect(find.text('Đây là nấm gì?'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-
-  testWidgets('small compact layout keeps the content full width', (tester) async {
-    await pumpHome(tester, const Size(320, 568));
-
-    expect(find.byType(NavigationRail), findsNothing);
-    expect(find.byKey(const Key('home-appbar-menu-button')), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('tablet layout starts with a 72 pixel compact rail', (tester) async {
-    await pumpHome(tester, const Size(800, 1280));
-
-    final rail = find.byType(NavigationRail);
-    expect(rail, findsOneWidget);
-    expect(tester.getSize(rail).width, 72);
-    expect(find.byTooltip('Mở rộng menu'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('resizing changes the navigation mode without losing selection', (
-    tester,
-  ) async {
-    await pumpHome(tester, const Size(800, 1280));
-    expect(find.text('Quản Lý Cơ Sở Trại Nấm'), findsOneWidget);
-
-    tester.view.physicalSize = const Size(390, 844);
-    await tester.pumpAndSettle();
-
-    expect(find.byType(NavigationRail), findsNothing);
-    expect(find.byKey(const Key('home-appbar-menu-button')), findsOneWidget);
-    expect(find.text('Quản Lý Cơ Sở Trại Nấm'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('desktop rail toggles without changing the selected content', (
+  testWidgets('wide layout keeps the restored main destinations accessible', (
     tester,
   ) async {
     await pumpHome(tester, const Size(1280, 800));
-
-    final rail = find.byType(NavigationRail);
-    expect(tester.getSize(rail).width, 220);
-    expect(find.text('Quản Lý Cơ Sở Trại Nấm'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('home-rail-toggle')));
+    expect(find.text('Đây là nấm gì?'), findsOneWidget);
+    await tester.tap(find.text('Quản lý'));
     await tester.pumpAndSettle();
-
-    expect(tester.getSize(rail).width, 72);
-    expect(find.text('Quản Lý Cơ Sở Trại Nấm'), findsOneWidget);
+    expect(find.text('Quản lý trại nấm'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

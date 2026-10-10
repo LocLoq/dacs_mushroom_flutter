@@ -1,27 +1,36 @@
 class StrainModel {
-  final String id;
-  final String name;
-  final double tempMin, tempMax; // °C
-  final double humidityMin, humidityMax; // %
-  final double co2Min, co2Max; // ppm
-
-  StrainModel({
+  final String id, name, scientificName, family, genus, edibilityStatus;
+  final String? habitat, cultivationDifficulty, imageUrl;
+  const StrainModel({
     required this.id,
     required this.name,
-    required this.tempMin,
-    required this.tempMax,
-    required this.humidityMin,
-    required this.humidityMax,
-    required this.co2Min,
-    required this.co2Max,
+    required this.scientificName,
+    required this.family,
+    required this.genus,
+    required this.edibilityStatus,
+    this.habitat,
+    this.cultivationDifficulty,
+    this.imageUrl,
   });
-
-  // TODO(BACKEND): factory StrainModel.fromJson(...) / Map<String,dynamic> toJson()
+  factory StrainModel.fromJson(Map<String, dynamic> json) => StrainModel(
+    id: json['id'].toString(),
+    name: json['commonName'] as String,
+    scientificName: json['scientificName'] as String,
+    family: json['family'] as String,
+    genus: json['genus'] as String,
+    edibilityStatus: json['edibilityStatus'] as String,
+    habitat: json['habitat'] as String?,
+    cultivationDifficulty: json['cultivationDifficulty'] as String?,
+    imageUrl: json['imageUrl'] as String?,
+  );
+  Map<String, dynamic> toJson() => {
+    'commonName': name,
+    'scientificName': scientificName,
+    'family': family,
+    'genus': genus,
+    'edibilityStatus': edibilityStatus,
+    'habitat': habitat,
+    'cultivationDifficulty': cultivationDifficulty,
+    'imageUrl': imageUrl,
+  };
 }
-
-// ------ Mock data (thay bằng dữ liệu thật từ ApiClient) ------
-final mockStrains = [
-  StrainModel(id: '1', name: 'Nấm Bào Ngư', tempMin: 25, tempMax: 30, humidityMin: 80, humidityMax: 95, co2Min: 400, co2Max: 800),
-  StrainModel(id: '2', name: 'Nấm Linh Chi', tempMin: 22, tempMax: 28, humidityMin: 85, humidityMax: 95, co2Min: 500, co2Max: 1000),
-  StrainModel(id: '3', name: 'Nấm Rơm', tempMin: 28, tempMax: 35, humidityMin: 80, humidityMax: 90, co2Min: 400, co2Max: 700),
-];

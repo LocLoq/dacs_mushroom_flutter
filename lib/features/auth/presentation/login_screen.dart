@@ -128,51 +128,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  ValueListenableBuilder<bool>(
-                    valueListenable: MockConfig.notifier,
-                    builder: (context, on, _) {
-                      if (!on) return const SizedBox.shrink();
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: theme.brightness == Brightness.dark
-                              ? AppColors.warning.withValues(alpha: 0.14)
-                              : AppColors.warningSoft,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(children: [
-                              const Icon(Icons.science_outlined, size: 18, color: AppColors.warning),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  tr(context,
-                                      vi: 'Chế độ dữ liệu mẫu: chưa cần backend. Bấm để điền sẵn tài khoản:',
-                                      en: 'Demo data mode: no backend needed. Tap to fill an account:'),
-                                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                            ]),
-                            const SizedBox(height: 8),
-                            Wrap(spacing: 8, runSpacing: 4, children: [
-                              for (final a in MockConfig.demoAccounts)
-                                ActionChip(
-                                  label: Text('${a.$1} · ${a.$3}'),
-                                  onPressed: () => setState(() {
-                                    _userCtrl.text = a.$1;
-                                    _passCtrl.text = a.$2;
-                                    _error = null;
-                                  }),
-                                ),
-                            ]),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                  if(MockConfig.enabled) const Padding(padding:EdgeInsets.only(bottom:16),child:Text('Dữ liệu mẫu: admin/admin123 · manager/manager123 · staff/staff123')),
                   CustomTextField(
                     label: tr(context, vi: 'Tài khoản', en: 'Username'),
                     controller: _userCtrl,

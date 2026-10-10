@@ -1,139 +1,157 @@
 import 'package:flutter/material.dart';
-
 import '../../../app/theme/app_colors.dart';
 import '../../../core/network/api_config.dart';
 import '../../../core/network/farm_api.dart';
+import '../../../core/network/api_client.dart' as live;
 import '../../../core/network/mock_config.dart';
-import '../../../core/storage/local_session.dart';
+import '../../../core/services/backend_queue_service.dart';
 import '../../../core/widgets/soft_card.dart';
 
-/// Địa chỉ API Trại nấm (Node, có hậu tố /api). Tách riêng khỏi "Backend URL" của dịch vụ AI.
 class FarmApiSettingsCard extends StatefulWidget {
   const FarmApiSettingsCard({super.key});
-
   @override
   State<FarmApiSettingsCard> createState() => _FarmApiSettingsCardState();
 }
 
 class _FarmApiSettingsCardState extends State<FarmApiSettingsCard> {
   late final _ctrl = TextEditingController(text: ApiConfig.baseUrl);
-  bool _busy = false;
-  String? _msg;
-  bool _ok = false;
-
+  bool _busy = false, _ok = false;
+  String? _message;
   @override
   void dispose() {
     _ctrl.dispose();
     super.dispose();
   }
 
-  Future<void> _save() async {
-    await ApiConfig.save(_ctrl.text);
-    if (!mounted) return;
-    setState(() {
-      _ctrl.text = ApiConfig.baseUrl;
-      _msg = 'Đã lưu địa chỉ API.';
-      _ok = true;
-    });
-  }
-
-  /// Máy chủ phản hồi bất kỳ mã HTTP nào (kể cả 401) nghĩa là kết nối được.
-  Future<void> _toggleMock(bool on) async {
-    await MockConfig.set(on);
-    await LocalSession.clear(); // token của chế độ này không dùng được ở chế độ kia
-    if (!mounted) return;
-    setState(() {
-      _ok = true;
-      _msg = on
-          ? 'Đã bật dữ liệu mẫu. Đăng nhập bằng admin/admin123, manager/manager123 hoặc staff/staff123.'
-          : 'Đã tắt dữ liệu mẫu. Ứng dụng sẽ gọi API thật; hãy đăng nhập lại.';
-    });
-  }
-
-  Future<void> _test() async {
-    if (MockConfig.enabled) {
-      _result(true, 'Đang dùng dữ liệu mẫu, không gọi máy chủ. Tắt công tắc ở trên để kiểm tra API thật.');
-      return;
-    }
-    await ApiConfig.save(_ctrl.text);
+  Future<void> _save({bool check = false}) async {
     setState(() {
       _busy = true;
-      _msg = null;
+      _message = null;
     });
     try {
-      await FarmApi.instance.get('/auth/me', public: true);
-      _result(true, 'Kết nối được máy chủ.');
-    } on ApiException catch (e) {
-      if (e.status > 0) {
-        _result(true, 'Kết nối được máy chủ (HTTP ${e.status}).');
-      } else {
-        _result(false, e.message);
+      await ApiConfig.save(_ctrl.text);
+      if (check) {
+        final response = await live.ApiClient().request(
+          '/test',
+          auth: live.RequestAuth.none,
+        );
+        if (response['status'] != 'running')
+          throw const ApiException(
+            500,
+            'Máy chủ trả về phản hồi không phù hợp.',
+          );
       }
+      if (mounted)
+        setState(() {
+          _ok = true;
+          _ctrl.text = ApiConfig.baseUrl;
+          _message = check
+              ? 'Kết nối máy chủ thành công.'
+              : 'Đã lưu địa chỉ máy chủ.';
+        });
+    } catch (error) {
+      if (mounted)
+        setState(() {
+          _ok = false;
+          _message = error.toString();
+        });
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  void _result(bool ok, String msg) {
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _ok = ok;
-      _msg = msg;
-    });
+  Future<void> _toggleMock(bool value) async {
+    setState(() => _busy = true);
+    try {
+      await MockConfig.set(value);
+      await BackendQueueService.instance.disconnect();
+      BackendQueueService.instance.clearSessionJobs();
+      if (!value) await BackendQueueService.instance.connect();
+      if (mounted)
+        setState(() {
+          _ok = true;
+          _message = value
+              ? 'Đã bật dữ liệu mẫu. Đăng nhập bằng admin/admin123, manager/manager123 hoặc staff/staff123.'
+              : 'Đã bật API thật. Vui lòng đăng nhập lại.';
+        });
+    } catch (error) {
+      if (mounted)
+        setState(() {
+          _ok = false;
+          _message = error.toString();
+        });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SectionTitle('API Trại nấm'),
-        SoftCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ValueListenableBuilder<bool>(
-                valueListenable: MockConfig.notifier,
-                builder: (context, on, _) => SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: on,
-                  onChanged: _toggleMock,
-                  title: const Text('Dùng dữ liệu mẫu'),
-                  subtitle: const Text('Không cần backend: đăng nhập và mọi màn quản lý chạy trên dữ liệu giả trong bộ nhớ.'),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const SectionTitle('Máy chủ quản lý và nhận diện'),
+      SoftCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ValueListenableBuilder<bool>(
+              valueListenable: MockConfig.notifier,
+              builder: (context, value, _) => SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: value,
+                onChanged: _busy ? null : _toggleMock,
+                title: const Text('Dùng dữ liệu mẫu'),
+                subtitle: const Text(
+                  'Dùng thử khi không có máy chủ. Dữ liệu mẫu tách biệt với dữ liệu thật.',
                 ),
               ),
-              const Divider(),
-              const SizedBox(height: 8),
-              Text('Địa chỉ API thật, dùng khi tắt dữ liệu mẫu (khác với máy chủ AI ở trên).',
-                  style: theme.textTheme.bodySmall),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _ctrl,
-                keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                  labelText: 'Địa chỉ API',
-                  prefixIcon: Icon(Icons.api_rounded),
-                  hintText: 'http://10.0.2.2:8080/api',
+            ),
+            const Divider(),
+            TextField(
+              controller: _ctrl,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Địa chỉ API',
+                prefixIcon: Icon(Icons.api_rounded),
+                hintText: 'http://10.0.2.2:8080/api',
+              ),
+            ),
+            if (_busy)
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: LinearProgressIndicator(),
+              ),
+            if (_message != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  _message!,
+                  style: TextStyle(
+                    color: _ok ? AppColors.success : AppColors.danger,
+                  ),
                 ),
               ),
-              if (_busy) ...[
-                const SizedBox(height: 12),
-                ClipRRect(borderRadius: BorderRadius.circular(8), child: const LinearProgressIndicator(minHeight: 6)),
-              ],
-              if (_msg != null) ...[
-                const SizedBox(height: 10),
-                Text(_msg!, style: TextStyle(color: _ok ? AppColors.success : AppColors.danger, fontSize: 13)),
-              ],
-              const SizedBox(height: 14),
-              Row(children: [
-                Expanded(child: FilledButton(onPressed: _busy ? null : _test, child: const Text('Lưu và kiểm tra'))),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _busy ? null : () => _save(check: true),
+                    child: const Text('Lưu và kiểm tra'),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: OutlinedButton(onPressed: _busy ? null : _save, child: const Text('Chỉ lưu'))),
-              ]),
-            ],
-          ),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _busy ? null : _save,
+                    child: const Text('Chỉ lưu'),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }

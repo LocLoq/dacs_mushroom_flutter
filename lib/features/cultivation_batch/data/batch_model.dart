@@ -1,11 +1,18 @@
 // Khớp với model Prisma `CultivationBatch` / enum `BatchStatus` phía backend.
-enum BatchStatus { preparation, incubation, fruiting, harvesting, completed, failed }
+enum BatchStatus {
+  preparation,
+  incubation,
+  fruiting,
+  harvesting,
+  completed,
+  failed,
+}
 
 class BatchModel {
   final String id;
   final String batchCode; // batch_code (unique)
 
-  // Khóa ngoại (mock: lưu tên hiển thị thay vì id quan hệ thật)
+  // Khóa ngoại và tên từ quan hệ backend.
   final String facilityId;
   final String facilityName;
   final String mushroomId;
@@ -80,120 +87,41 @@ class BatchModel {
     );
   }
 
-  // TODO(BACKEND): factory BatchModel.fromJson(Map<String, dynamic> json) => BatchModel(
-  //   id: json['id'].toString(),
-  //   batchCode: json['batch_code'],
-  //   facilityId: json['facility_id'].toString(),
-  //   facilityName: json['facility']?['name'] ?? '',
-  //   mushroomId: json['mushroom_id'].toString(),
-  //   mushroomName: json['mushroom']?['name'] ?? '',
-  //   status: BatchStatus.values.byName(json['status'].toString().toLowerCase()),
-  //   substrateType: json['substrate_type'],
-  //   spawnSource: json['spawn_source'],
-  //   bagQuantity: json['bag_quantity'],
-  //   startDate: DateTime.parse(json['start_date']),
-  //   expectedHarvestDate: json['expected_harvest_date'] != null ? DateTime.parse(json['expected_harvest_date']) : null,
-  //   endDate: json['end_date'] != null ? DateTime.parse(json['end_date']) : null,
-  //   actualYieldKg: (json['actual_yield_kg'] as num?)?.toDouble(),
-  //   defectRate: (json['defect_rate'] as num?)?.toDouble(),
-  //   notes: json['notes'],
-  // );
-  //
-  // Map<String, dynamic> toJson() => {
-  //   'batch_code': batchCode,
-  //   'facility_id': int.parse(facilityId),
-  //   'mushroom_id': int.parse(mushroomId),
-  //   'status': status.name.toUpperCase(),
-  //   'substrate_type': substrateType,
-  //   'spawn_source': spawnSource,
-  //   'bag_quantity': bagQuantity,
-  //   'start_date': startDate.toIso8601String(),
-  //   'expected_harvest_date': expectedHarvestDate?.toIso8601String(),
-  //   'end_date': endDate?.toIso8601String(),
-  //   'actual_yield_kg': actualYieldKg,
-  //   'defect_rate': defectRate,
-  //   'notes': notes,
-  // };
+  factory BatchModel.fromJson(Map<String, dynamic> json) => BatchModel(
+    id: json['id'].toString(),
+    batchCode: json['batchCode'] as String,
+    facilityId: json['facilityId'].toString(),
+    facilityName: (json['facility'] as Map?)?['name']?.toString() ?? '',
+    mushroomId: json['mushroomId'].toString(),
+    mushroomName: (json['mushroom'] as Map?)?['commonName']?.toString() ?? '',
+    status: BatchStatus.values.byName((json['status'] as String).toLowerCase()),
+    substrateType: json['substrateType'] as String?,
+    spawnSource: json['spawnSource'] as String?,
+    bagQuantity: (json['bagQuantity'] as num?)?.toInt(),
+    startDate: DateTime.parse(json['startDate'] as String),
+    expectedHarvestDate: json['expectedHarvestDate'] == null
+        ? null
+        : DateTime.parse(json['expectedHarvestDate'] as String),
+    endDate: json['endDate'] == null
+        ? null
+        : DateTime.parse(json['endDate'] as String),
+    actualYieldKg: (json['actualYieldKg'] as num?)?.toDouble(),
+    defectRate: (json['defectRate'] as num?)?.toDouble(),
+    notes: json['notes'] as String?,
+  );
+  Map<String, dynamic> toJson() => {
+    'batchCode': batchCode,
+    'facilityId': int.parse(facilityId),
+    'mushroomId': int.parse(mushroomId),
+    'status': status.name.toUpperCase(),
+    'substrateType': substrateType,
+    'spawnSource': spawnSource,
+    'bagQuantity': bagQuantity,
+    'startDate': startDate.toIso8601String(),
+    'expectedHarvestDate': expectedHarvestDate?.toIso8601String(),
+    'endDate': endDate?.toIso8601String(),
+    'actualYieldKg': actualYieldKg,
+    'defectRate': defectRate,
+    'notes': notes,
+  };
 }
-
-// ------ Mock data (thay bằng dữ liệu thật từ ApiClient) ------
-final mockBatches = [
-  BatchModel(
-    id: '1',
-    batchCode: 'B-2026-001',
-    facilityId: '1',
-    facilityName: 'Trại nấm Đơn Dương',
-    mushroomId: '1',
-    mushroomName: 'Nấm Bào Ngư',
-    status: BatchStatus.fruiting,
-    substrateType: 'Mùn cưa cao su',
-    spawnSource: 'Trại giống Bảo Lộc',
-    bagQuantity: 2000,
-    startDate: DateTime(2026, 7, 1),
-    expectedHarvestDate: DateTime(2026, 9, 15),
-    notes: 'Theo dõi độ ẩm hàng ngày, tơ lan đều.',
-  ),
-  BatchModel(
-    id: '2',
-    batchCode: 'B-2026-002',
-    facilityId: '1',
-    facilityName: 'Trại nấm Đơn Dương',
-    mushroomId: '2',
-    mushroomName: 'Nấm Linh Chi',
-    status: BatchStatus.incubation,
-    substrateType: 'Mùn cưa keo',
-    spawnSource: 'Tự nhân giống',
-    bagQuantity: 1200,
-    startDate: DateTime(2026, 8, 10),
-    expectedHarvestDate: DateTime(2026, 11, 1),
-  ),
-  BatchModel(
-    id: '3',
-    batchCode: 'B-2026-003',
-    facilityId: '2',
-    facilityName: 'Trại nấm Đức Trọng',
-    mushroomId: '3',
-    mushroomName: 'Nấm Rơm',
-    status: BatchStatus.harvesting,
-    substrateType: 'Rơm rạ ủ',
-    spawnSource: 'Trại giống Bảo Lộc',
-    bagQuantity: 800,
-    startDate: DateTime(2026, 8, 20),
-    expectedHarvestDate: DateTime(2026, 9, 5),
-    actualYieldKg: 145.5,
-    defectRate: 4.2,
-  ),
-  BatchModel(
-    id: '4',
-    batchCode: 'B-2026-004',
-    facilityId: '3',
-    facilityName: 'Trại nấm Lạc Dương',
-    mushroomId: '1',
-    mushroomName: 'Nấm Bào Ngư',
-    status: BatchStatus.failed,
-    substrateType: 'Mùn cưa cao su',
-    spawnSource: 'Trại giống Bảo Lộc',
-    bagQuantity: 500,
-    startDate: DateTime(2026, 6, 1),
-    endDate: DateTime(2026, 6, 25),
-    defectRate: 100,
-    notes: 'Nhiễm mốc xanh toàn trại, đã tiêu hủy.',
-  ),
-  BatchModel(
-    id: '5',
-    batchCode: 'B-2025-088',
-    facilityId: '1',
-    facilityName: 'Trại nấm Đơn Dương',
-    mushroomId: '1',
-    mushroomName: 'Nấm Bào Ngư',
-    status: BatchStatus.completed,
-    substrateType: 'Mùn cưa cao su',
-    spawnSource: 'Trại giống Bảo Lộc',
-    bagQuantity: 1800,
-    startDate: DateTime(2025, 11, 1),
-    expectedHarvestDate: DateTime(2026, 1, 10),
-    endDate: DateTime(2026, 1, 20),
-    actualYieldKg: 612.0,
-    defectRate: 6.5,
-  ),
-];

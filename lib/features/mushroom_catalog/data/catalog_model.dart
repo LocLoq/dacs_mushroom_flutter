@@ -2,6 +2,11 @@ class MushroomCatalogItem {
   final String name;
   final String scientificName;
   final bool isPoisonous;
+  final String? edibilityStatus;
+  String get edibilityLabel => switch(edibilityStatus) {
+    'CHOICE' => 'Ăn ngon', 'EDIBLE' => 'Ăn được', 'INEDIBLE' => 'Không ăn được',
+    'POISONOUS' => 'Có độc', 'DEADLY' => 'Độc chết người', _ => isPoisonous ? 'Có độc' : 'Chưa xác định',
+  };
 
   /// Ảnh đại diện do backend trả về (tuỳ chọn). Có thể là URL đầy đủ
   /// (https://...) hoặc đường dẫn tương đối (/media/mushrooms/abc.jpg).
@@ -11,6 +16,7 @@ class MushroomCatalogItem {
     required this.name,
     required this.scientificName,
     required this.isPoisonous,
+    this.edibilityStatus,
     this.imageUrl,
   });
 

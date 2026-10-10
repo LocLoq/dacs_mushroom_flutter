@@ -45,8 +45,9 @@ class RecognitionHistoryService {
           if (item is Map<String, dynamic>) {
             _items.add(RecognitionHistoryItem.fromJson(item));
           } else if (item is Map) {
-            _items.add(RecognitionHistoryItem.fromJson(
-                Map<String, dynamic>.from(item)));
+            _items.add(
+              RecognitionHistoryItem.fromJson(Map<String, dynamic>.from(item)),
+            );
           }
         }
       } catch (_) {
@@ -61,11 +62,13 @@ class RecognitionHistoryService {
 
     final result = job.result;
     final prediction = result?['prediction']?.toString();
-    final mushroomName = result?['mushroom_name']?.toString() ??
+    final mushroomName =
+        result?['mushroom_name']?.toString() ??
         (prediction != null ? 'Nấm: $prediction' : null);
     final rawPrediction = result?['raw_prediction']?.toString();
     final confidence = (result?['confidence'] as num?)?.toDouble();
-    final isPoisonous = result?['is_poisonous'] == true ||
+    final isPoisonous =
+        result?['is_poisonous'] == true ||
         result?['is_poisonous'] == 1 ||
         result?['is_poisonous'].toString().toLowerCase() == 'true';
     final decisionReason = result?['decision_reason']?.toString();
@@ -155,4 +158,3 @@ class RecognitionHistoryService {
     }
   }
 }
-

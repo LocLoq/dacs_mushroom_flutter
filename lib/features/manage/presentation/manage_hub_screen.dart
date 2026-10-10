@@ -51,7 +51,7 @@ class _ManageHubScreenState extends State<ManageHubScreen> {
       message: 'Bạn sẽ quay về chế độ khách. Nhận diện, từ điển và tra cứu lô vẫn dùng được.',
       ok: 'Đăng xuất',
     );
-    if (ok) await LocalSession.clear();
+    if (ok) await LocalSession.logout();
   }
 
   Future<void> _retry() async {
@@ -96,31 +96,7 @@ class _ManageHubScreenState extends State<ManageHubScreen> {
                   style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 14),
-                ValueListenableBuilder<bool>(
-                  valueListenable: MockConfig.notifier,
-                  builder: (context, on, _) => on
-                      ? Container(
-                          margin: const EdgeInsets.only(bottom: 14),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: theme.brightness == Brightness.dark
-                                ? AppColors.warning.withValues(alpha: 0.14)
-                                : AppColors.warningSoft,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Row(children: [
-                            Icon(Icons.science_outlined, color: AppColors.warning, size: 20),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                'Đang dùng DỮ LIỆU MẪU: không gọi backend, thay đổi mất khi mở lại app. Tắt ở Cài đặt → API Trại nấm.',
-                                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, height: 1.4),
-                              ),
-                            ),
-                          ]),
-                        )
-                      : const SizedBox.shrink(),
-                ),
+                if(MockConfig.enabled) const SoftCard(child:Text('DỮ LIỆU MẪU — các thay đổi chỉ dùng để minh họa, không lưu vào máy chủ.')),
                 if (status == SessionStatus.guest) ..._guest(context),
                 if (status == SessionStatus.pending) _pending(context),
                 if (status == SessionStatus.signedIn) ..._signedIn(context),

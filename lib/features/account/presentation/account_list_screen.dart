@@ -1,19 +1,14 @@
 import 'package:flutter/material.dart';
-
-import '../../../app/home_screen.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/localization/app_text_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/local_session.dart';
-import '../../../core/widgets/status_chip.dart';
 import '../data/account_model.dart';
 import 'account_edit_sheet.dart';
 
 class AccountListScreen extends StatefulWidget {
-  final VoidCallback? onOpenNavigation;
-
   const AccountListScreen({super.key, this.onOpenNavigation});
-
+  final VoidCallback? onOpenNavigation;
   @override
   State<AccountListScreen> createState() => _AccountListScreenState();
 }
@@ -21,8 +16,10 @@ class AccountListScreen extends StatefulWidget {
 class _AccountListScreenState extends State<AccountListScreen> {
   final _api = ApiClient();
   List<AccountModel> _accounts = [];
+  List<Map<String, dynamic>> _roles = [];
+  Map<String, dynamic>? _profile;
   bool _loading = true;
-
+  String? _error;
   @override
   void initState() {
     super.initState();
@@ -30,211 +27,142 @@ class _AccountListScreenState extends State<AccountListScreen> {
   }
 
   Future<void> _load() async {
-    // TODO(BACKEND): account_controller -> user_repository -> ApiClient.fetchAccounts
-    // Chỉ Admin/Manager mới được gọi API này — kiểm tra role ở backend (permission_classes)
-    final data = await _api.fetchAccounts();
-    setState(() { _accounts = data; _loading = false; });
-  }
-
-  void _openEditSheet(AccountModel a) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => AccountEditSheet(
-        account: a,
-        onSaveRole: (role, facility) async {
-          // TODO(BACKEND): ApiClient.updateAccountRole(a.id, role, facility)
-          await _api.updateAccountRole(a.id, role, facility);
-          final idx = _accounts.indexOf(a);
-          setState(() {
-            if (idx != -1) {
-              _accounts[idx] = AccountModel(
-                id: a.id,
-                fullName: a.fullName,
-                role: role,
-                assignedFacility: facility,
-                isActive: a.isActive,
-              );
-            }
-          });
-        },
-        onSavePassword: (newPassword, mustChangePassword) async {
-          // TODO(BACKEND): ApiClient.setAccountPassword(a.id, newPassword, mustChangePassword: ...)
-          await _api.setAccountPassword(a.id, newPassword, mustChangePassword: mustChangePassword);
-          setState(() => a.mustChangePassword = mustChangePassword);
-        },
-      ),
-    );
-  }
-
-  AccountRole _parseRole(String role) {
-    switch (role.toLowerCase()) {
-      case 'admin':
-        return AccountRole.admin;
-      case 'manager':
-        return AccountRole.manager;
-      default:
-        return AccountRole.staff;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final profile = await _api.fetchProfile();
+      final accounts = LocalSession.isAdmin
+          ? await _api.fetchAccounts()
+          : <AccountModel>[];
+      final roles = LocalSession.isAdmin
+          ? await _api.fetchRoles()
+          : <Map<String, dynamic>>[];
+      if (mounted) {
+        setState(() {
+          _profile = profile;
+          _accounts = accounts;
+          _roles = roles;
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _openEditSelfSheet() {
-    // TODO(BACKEND): lấy đầy đủ thông tin tài khoản hiện tại (id, cơ sở phụ trách) từ API profile thay vì LocalSession
-    final self = AccountModel(
-      id: '',
-      fullName: LocalSession.username.isEmpty ? 'Tài khoản của tôi' : LocalSession.username,
-      role: _parseRole(LocalSession.role),
-      assignedFacility: '',
-      isActive: true,
-    );
-    _openEditSheet(self);
-  }
-
-  Color _roleColor(AccountRole r) => switch (r) {
-        AccountRole.admin => AppColors.danger,
-        AccountRole.manager => AppColors.primary,
-        AccountRole.staff => AppColors.textSecondary,
-      };
-
-  String _roleLabel(AccountRole r) => switch (r) {
-        AccountRole.admin => 'Admin',
-        AccountRole.manager => 'Manager',
-        AccountRole.staff => 'Staff',
-      };
-
-  Future<void> _handleLogout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Đăng xuất'),
-        content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Đăng xuất'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    // TODO(BACKEND): gọi API /auth/logout (thu hồi refresh token) trước khi clear session, nếu backend hỗ trợ.
-    LocalSession.clear();
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Đã đăng xuất thành công')),
-    );
-
-    // Quay về HomeScreen ở trạng thái chưa đăng nhập (reset toàn bộ ngăn xếp điều hướng)
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-      (route) => false,
-    );
-  }
-
+  void _edit(AccountModel account) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) => AccountEditSheet(
+      account: account,
+      roles: _roles,
+      onSave: (updated, password) async {
+        await _api.updateAccount(updated, password: password);
+        if (account.id == LocalSession.user?['id'].toString() &&
+            (updated.roleId != account.roleId || password != null)) {
+          await LocalSession.logout();
+        } else {
+          await _load();
+        }
+      },
+    ),
+  );
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: widget.onOpenNavigation == null
-            ? null
-            : IconButton(
-                key: const Key('home-appbar-menu-button'),
-                tooltip: tr(
-                  context,
-                  vi: 'Mở menu điều hướng',
-                  en: 'Open navigation menu',
-                ),
-                icon: const Icon(Icons.menu_rounded),
-                onPressed: widget.onOpenNavigation,
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      leading: widget.onOpenNavigation == null
+          ? null
+          : IconButton(
+              key: const Key('home-appbar-menu-button'),
+              icon: const Icon(Icons.menu_rounded),
+              tooltip: tr(
+                context,
+                vi: 'Mở menu điều hướng',
+                en: 'Open navigation menu',
               ),
-        title: const Text(
-          'Quản lý tài khoản',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Đăng xuất',
-            onPressed: _handleLogout,
-          ),
-        ],
+              onPressed: widget.onOpenNavigation,
+            ),
+      title: const Text(
+        'Quản lý tài khoản',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView.builder(
+      actions: [
+        IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        IconButton(
+          onPressed: LocalSession.logout,
+          icon: const Icon(Icons.logout),
+          tooltip: 'Đăng xuất',
+        ),
+      ],
+    ),
+    body: _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _error != null
+        ? Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_error!),
+                TextButton(onPressed: _load, child: const Text('Thử lại')),
+              ],
+            ),
+          )
+        : RefreshIndicator(
+            onRefresh: _load,
+            child: ListView(
               padding: const EdgeInsets.all(16),
-              itemCount: _accounts.length + 1,
-              itemBuilder: (context, i) {
-                if (i == 0) {
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    color: AppColors.primary.withOpacity(0.08),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: AppColors.primary.withOpacity(0.3)),
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.all(14),
-                      leading: CircleAvatar(
-                        backgroundColor: AppColors.primary.withOpacity(0.15),
-                        child: const Icon(Icons.person, color: AppColors.primary),
-                      ),
-                      title: Text(
-                        LocalSession.username.isEmpty ? 'Tài khoản của tôi' : LocalSession.username,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(LocalSession.role, style: const TextStyle(color: AppColors.textSecondary)),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.edit, size: 20, color: AppColors.textSecondary),
-                        tooltip: 'Sửa vai trò / mật khẩu',
-                        onPressed: _openEditSelfSheet,
-                      ),
-                    ),
-                  );
-                }
-
-                final a = _accounts[i - 1];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
+              children: [
+                Card(
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   child: ListTile(
-                    contentPadding: const EdgeInsets.all(14),
-                    leading: CircleAvatar(
-                      backgroundColor: _roleColor(a.role).withOpacity(0.15),
-                      child: Text(a.fullName.characters.first,
-                          style: TextStyle(color: _roleColor(a.role), fontWeight: FontWeight.bold)),
+                    leading: const CircleAvatar(child: Icon(Icons.person)),
+                    title: Text(
+                      _profile?['full_name']?.toString() ??
+                          LocalSession.username,
                     ),
-                    title: Text(a.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Wrap(
-                        spacing: 6, runSpacing: 6,
-                        children: [
-                          StatusChip(text: _roleLabel(a.role), color: _roleColor(a.role)),
-                          Text('· ${a.assignedFacility}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                          if (a.mustChangePassword)
-                            const StatusChip(text: 'Chờ đổi mật khẩu', color: AppColors.warning),
-                        ],
-                      ),
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.edit, size: 20, color: AppColors.textSecondary),
-                      tooltip: 'Sửa vai trò / mật khẩu',
-                      onPressed: () => _openEditSheet(a),
+                    subtitle: Text(
+                      '${LocalSession.username} · ${LocalSession.role}',
                     ),
                   ),
-                );
-              },
+                ),
+                if (!LocalSession.isAdmin)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('Chỉ Admin được quản trị tài khoản.'),
+                  ),
+                for (final account in _accounts)
+                  Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        child: Text(
+                          account.fullName.isEmpty
+                              ? '?'
+                              : account.fullName.characters.first,
+                        ),
+                      ),
+                      title: Text(
+                        account.fullName,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        '${account.username} · ${account.role.name}\n${account.email}',
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => _edit(account),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-    );
-  }
+          ),
+  );
 }

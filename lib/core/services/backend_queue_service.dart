@@ -1,114 +1,93 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
-
+import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../../app/config/app_constants.dart';
 import '../../features/recognition/data/job_status.dart';
 import '../../features/recognition/data/prepared_frame.dart';
 import '../../features/recognition/data/queue_event.dart';
 import '../../features/recognition/data/queue_job.dart';
+import '../network/api_client.dart';
+import '../network/mock_config.dart';
 import 'recognition_history_service.dart';
 
 class BackendQueueService {
   static BackendQueueService? _instance;
-  static BackendQueueService get instance => _instance ??= BackendQueueService();
-
-  String _backendBaseUrl = AppConstants.kDefaultBackendBaseUrl;
-  final Map<String, QueueJob> _jobs = {};
-  final StreamController<QueueEvent> _eventController =
-      StreamController<QueueEvent>.broadcast();
-
-  WebSocketChannel? _channel;
-  StreamSubscription? _wsSubscription;
-  Timer? _pollTimer;
-  Timer? _reconnectTimer;
-  bool _wsConnected = false;
-  final bool _autoReconnectEnabled = true;
-
+  static BackendQueueService get instance =>
+      _instance ??= BackendQueueService();
+  BackendQueueService([String? initialBaseUrl]) {
+    _backendBaseUrl = normalizeBaseUrl(
+      initialBaseUrl ?? AppConstants.kDefaultBackendBaseUrl,
+    );
+  }
+  late String _backendBaseUrl;
+  final _jobs = <String, QueueJob>{};
+  final _events = StreamController<QueueEvent>.broadcast();
+  io.Socket? _socket;
+  bool get isWebSocketConnected => _socket?.connected ?? false;
   String get backendBaseUrl => _backendBaseUrl;
-  bool get isWebSocketConnected => _wsConnected;
-  Stream<QueueEvent> get events => _eventController.stream;
+  Stream<QueueEvent> get events => _events.stream;
   List<QueueJob> get jobs =>
       _jobs.values.toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  static String normalizeBaseUrl(String raw) =>
+      ApiConfig.fromInput(raw).serverOrigin.toString();
 
-  BackendQueueService([String? initialBaseUrl]) {
-    if (initialBaseUrl != null && initialBaseUrl.isNotEmpty) {
-      updateBackendBaseUrl(initialBaseUrl);
-    }
-    _startPolling();
-  }
-
-  static String normalizeBaseUrl(String raw) {
-    var trimmed = raw.trim();
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      trimmed = 'http://$trimmed';
-    }
-    final uri = Uri.tryParse(trimmed);
-    if (uri == null || !uri.hasAuthority) {
-      throw const FormatException('URL backend không hợp lệ. Vui lòng kiểm tra lại host:port.');
-    }
-    final portPart = uri.hasPort ? ':${uri.port}' : '';
-    return '${uri.scheme}://${uri.host}$portPart';
-  }
-
-  void updateBackendBaseUrl(String newUrl) {
-    try {
-      final normalized = normalizeBaseUrl(newUrl);
-      if (_backendBaseUrl != normalized) {
-        _backendBaseUrl = normalized;
-        if (_wsConnected) {
-          reconnect(_backendBaseUrl);
-        }
-      }
-    } catch (_) {
-      _backendBaseUrl = newUrl.trim();
-    }
+  void updateBackendBaseUrl(String value) {
+    final normalized = normalizeBaseUrl(value);
+    if (normalized == _backendBaseUrl) return;
+    _socket?.dispose();
+    _socket = null;
+    _jobs.clear();
+    _backendBaseUrl = normalized;
   }
 
   Future<void> connect([String? baseUrl]) async {
-    if (baseUrl != null) {
-      updateBackendBaseUrl(baseUrl);
+    if (MockConfig.enabled) {
+      _emit('ws.mock', {'message': 'Đang dùng dữ liệu mẫu.'});
+      return;
     }
-
-    await disconnect();
-
-    final wsUri = _buildWsUri(_backendBaseUrl);
-    try {
-      _channel = WebSocketChannel.connect(wsUri);
-      await _channel!.ready;
-      _wsConnected = true;
-      _emit('ws.connected', {'url': wsUri.toString()});
-
-      _wsSubscription = _channel!.stream.listen(
-        (data) {
-          _handleWsMessage(data);
-        },
-        onDone: () {
-          _wsConnected = false;
-          _emit('ws.closed', {'reason': 'Connection closed'});
-          _scheduleReconnect();
-        },
-        onError: (err) {
-          _wsConnected = false;
-          _emit('ws.error', {'message': err.toString()});
-          _scheduleReconnect();
-        },
-        cancelOnError: false,
-      );
-    } catch (e) {
-      _wsConnected = false;
-      _emit('ws.error', {'message': e.toString()});
-      _scheduleReconnect();
+    if (baseUrl != null) updateBackendBaseUrl(baseUrl);
+    if (_socket != null) {
+      if (!isWebSocketConnected) _socket!.connect();
+      return;
     }
+    final socket = io.io(
+      _backendBaseUrl,
+      io.OptionBuilder()
+          .setTransports(['websocket'])
+          .enableForceNew()
+          .enableReconnection()
+          .disableAutoConnect()
+          .build(),
+    );
+    _socket = socket;
+    socket.onConnect((_) {
+      _emit('ws.connected', {'url': _backendBaseUrl});
+      for (final job in _jobs.values.where(
+        (job) =>
+            job.status == JobStatus.queued ||
+            job.status == JobStatus.processing,
+      )) {
+        socket.emit('subscribe_job', job.jobId);
+      }
+    });
+    socket.onDisconnect(
+      (_) => _emit('ws.closed', {'reason': 'Connection closed'}),
+    );
+    socket.onConnectError(
+      (_) => _emit('ws.error', {
+        'message': 'Không kết nối được máy chủ. Đang thử lại.',
+      }),
+    );
+    for (final event in ['processing', 'finished', 'failed']) {
+      socket.on(event, _handleEvent);
+    }
+    socket.connect();
   }
 
   Future<void> reconnect(String baseUrl) async {
-    updateBackendBaseUrl(baseUrl);
+    await disconnect();
     await connect(baseUrl);
   }
 
@@ -116,373 +95,234 @@ class BackendQueueService {
     String baseUrl, {
     Duration timeout = const Duration(seconds: 15),
   }) async {
+    await disconnect();
     updateBackendBaseUrl(baseUrl);
-    final completer = Completer<void>();
-
-    late StreamSubscription sub;
-    sub = events.listen((e) {
-      if (e.event == 'ws.connected' && !completer.isCompleted) {
-        completer.complete();
-      }
+    final connected = Completer<void>();
+    final subscription = events.listen((event) {
+      if (event.event == 'ws.connected' && !connected.isCompleted)
+        connected.complete();
     });
-
-    await connect(baseUrl);
-
     try {
-      await completer.future.timeout(timeout);
+      await connect();
+      await connected.future.timeout(timeout);
     } finally {
-      await sub.cancel();
+      await subscription.cancel();
     }
   }
 
   Future<void> disconnect() async {
-    _reconnectTimer?.cancel();
-    _reconnectTimer = null;
-    await _wsSubscription?.cancel();
-    _wsSubscription = null;
-    await _channel?.sink.close();
-    _channel = null;
-    if (_wsConnected) {
-      _wsConnected = false;
-      _emit('ws.closed', {'reason': 'Manual disconnect'});
-    }
+    _socket?.dispose();
+    _socket = null;
+    _emit('ws.closed', {'reason': 'Manual disconnect'});
   }
 
   void sendPing() {
-    if (!_wsConnected || _channel == null) {
-      _emit('ws.error', {'message': 'WebSocket chưa kết nối'});
-      return;
-    }
+    unawaited(_checkServer());
+  }
+
+  Future<void> _checkServer() async {
     try {
-      _channel!.sink.add('ping');
-    } catch (e) {
-      _wsConnected = false;
-      _emit('ws.error', {'message': e.toString()});
-      _scheduleReconnect();
+      await ApiClient().request(
+        '/test',
+        baseUrl: _backendBaseUrl,
+        auth: RequestAuth.none,
+      );
+      _emit('pong', {'message': 'Máy chủ đang hoạt động'});
+    } catch (error) {
+      _emit('ws.error', {'message': error.toString()});
     }
   }
 
   Future<String> enqueue(PreparedFrame frame) async {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fallbackJobId = 'job_$timestamp';
-
-    try {
-      final uri = Uri.parse('$_backendBaseUrl/api/images/upload');
-      final request = http.MultipartRequest('POST', uri);
-
-      final extension = frame.sourcePath.split('.').last.toLowerCase();
-      final mimeType = _detectMediaType(extension);
-
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          frame.bytes,
-          filename: 'upload-$timestamp.$extension',
-          contentType: MediaType('image', mimeType),
-        ),
+    final bytes = frame.bytes;
+    if (bytes.lengthInBytes > 5 * 1024 * 1024)
+      throw const ApiException(
+        'Ảnh tối đa 5 MB.',
+        kind: ApiErrorKind.validation,
       );
-
-      final streamedResponse = await request.send().timeout(const Duration(seconds: 10));
-      final responseBody = await streamedResponse.stream.bytesToString();
-
-      if (streamedResponse.statusCode == 200 || streamedResponse.statusCode == 201) {
-        final data = jsonDecode(responseBody) as Map<String, dynamic>;
-        final realJobId = (data['job_id'] ?? fallbackJobId).toString();
-
-        _upsertJob(
-          jobId: realJobId,
-          status: JobStatus.queued,
-          previewBytes: frame.bytes,
-          originalMediaPath: frame.sourcePath,
-          originalMediaType: frame.mediaType,
-          imageInfo: {
-            'source': frame.sourceLabel,
-            'quality_score': frame.qualityScore,
-            'selected_frame_ms': frame.selectedFrameMs,
-            'size_bytes': frame.bytes.lengthInBytes,
-          },
-        );
-
-        unawaited(fetchJob(realJobId));
-        return realJobId;
-      } else {
-        throw Exception('Server phản hồi lỗi (${streamedResponse.statusCode}): $responseBody');
-      }
-    } catch (e) {
-      // Fallback: Nếu không kết nối được máy chủ backend (chế độ demo/offline),
-      // tự động giả lập tiến trình job để người dùng vẫn trải nghiệm được flow ứng dụng mượt mà!
-      _simulateOfflineJob(fallbackJobId, frame);
-      return fallbackJobId;
+    final type = bytes.length > 3 && bytes[0] == 0xff && bytes[1] == 0xd8
+        ? 'jpeg'
+        : bytes.length > 8 &&
+              bytes[0] == 0x89 &&
+              bytes[1] == 0x50 &&
+              bytes[2] == 0x4e &&
+              bytes[3] == 0x47
+        ? 'png'
+        : bytes.length > 12 &&
+              bytes[0] == 0x52 &&
+              bytes[1] == 0x49 &&
+              bytes[8] == 0x57 &&
+              bytes[9] == 0x45
+        ? 'webp'
+        : null;
+    if (type == null)
+      throw const ApiException(
+        'Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.',
+        kind: ApiErrorKind.validation,
+      );
+    if (MockConfig.enabled) {
+      final now = DateTime.now();
+      final jobId = 'mock-' + now.microsecondsSinceEpoch.toString();
+      _jobs[jobId] = QueueJob(
+        jobId: jobId,
+        status: JobStatus.completed,
+        createdAt: now,
+        updatedAt: now,
+        previewBytes: frame.bytes,
+        originalMediaPath: frame.sourcePath,
+        originalMediaType: frame.mediaType,
+        result: {
+          'demo': true,
+          'mushroom_name': 'Kết quả mẫu',
+          'prediction': 'unknown',
+          'is_poisonous': null,
+          'decision_reason': 'Chỉ minh họa giao diện, không phân tích ảnh.',
+        },
+      );
+      _emit('job.result', {
+        'job_id': jobId,
+        'status': 'completed',
+        'result': _jobs[jobId]!.result,
+      });
+      unawaited(_saveHistory(_jobs[jobId]!));
+      return jobId;
     }
-  }
-
-  void _simulateOfflineJob(String jobId, PreparedFrame frame) {
-    _upsertJob(
+    final cfg = ApiConfig.fromInput(_backendBaseUrl);
+    final request = http.MultipartRequest(
+      'POST',
+      cfg.endpoint('/mushroom-classifier/classify'),
+    );
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'image',
+        bytes,
+        filename: 'upload.' + (type == 'jpeg' ? 'jpg' : type),
+        contentType: MediaType('image', type),
+      ),
+    );
+    final data = await ApiClient().send(
+      request,
+      auth: RequestAuth.optional,
+      serverOrigin: _backendBaseUrl,
+    );
+    final jobId = data['jobId'] as String;
+    final now = DateTime.now();
+    _jobs[jobId] = QueueJob(
       jobId: jobId,
-      status: JobStatus.queued,
-      previewBytes: frame.bytes,
+      status: JobStatus.fromString(data['status'] as String?),
+      createdAt: now,
+      updatedAt: now,
+      previewBytes: bytes,
       originalMediaPath: frame.sourcePath,
       originalMediaType: frame.mediaType,
       imageInfo: {
         'source': frame.sourceLabel,
         'quality_score': frame.qualityScore,
         'selected_frame_ms': frame.selectedFrameMs,
-        'size_bytes': frame.bytes.lengthInBytes,
+        'size_bytes': bytes.lengthInBytes,
       },
     );
+    _emit('job.status', {'job_id': jobId, 'status': _jobs[jobId]!.status.name});
+    await connect();
+    _socket?.emit('subscribe_job', jobId);
+    return jobId;
+  }
 
-    _emit('job.status', {'job_id': jobId, 'status': 'queued'});
-
-    // Chuyển sang processing sau 600ms
-    Timer(const Duration(milliseconds: 600), () {
-      _upsertJob(jobId: jobId, status: JobStatus.processing);
-      _emit('job.status', {'job_id': jobId, 'status': 'processing'});
-
-      // Hoàn tất sau 1.5s
-      Timer(const Duration(milliseconds: 1500), () {
-        final mockNames = [
-          {'vi': 'Nấm Bào Ngư (Oyster)', 'pred': 'Pleurotus ostreatus', 'poison': false},
-          {'vi': 'Nấm Rơm (Straw)', 'pred': 'Volvariella volvacea', 'poison': false},
-          {'vi': 'Nấm Tử Thần (Death Cap)', 'pred': 'Amanita phalloides', 'poison': true},
-          {'vi': 'Nấm Tán Bay (Fly Agaric)', 'pred': 'Amanita muscaria', 'poison': true},
-        ];
-        final randomPick = mockNames[math.Random().nextInt(mockNames.length)];
-
-        final mockResult = {
-          'prediction': randomPick['pred'],
-          'mushroom_name': randomPick['vi'],
-          'raw_prediction': randomPick['pred'],
-          'accepted_prediction': true,
-          'confidence': 0.935,
-          'confidence_threshold': 0.70,
-          'is_poisonous': randomPick['poison'],
-          'decision_reason': 'Demo / Offline Simulation Result',
-          'image_type': 'jpeg',
-          'size_bytes': frame.bytes.lengthInBytes,
-          'sha256': 'simulated_offline_hash',
-          'inference_time_seconds': 0.35,
-        };
-
-        _upsertJob(
-          jobId: jobId,
-          status: JobStatus.completed,
-          result: mockResult,
-        );
-
-        _emit('job.status', {'job_id': jobId, 'status': 'completed'});
-        _emit('job.result', {
-          'job_id': jobId,
-          'status': 'completed',
-          'result': mockResult,
-        });
-
-        // Đồng bộ vào RecognitionHistoryService
-        final job = _jobs[jobId];
-        if (job != null) {
-          RecognitionHistoryService.instance.upsertFromJob(job, _backendBaseUrl);
-        }
-      });
-    });
+  void clearSessionJobs() {
+    _jobs.clear();
+    _emit('session.reset', {});
   }
 
   Future<void> fetchJob(String jobId) async {
-    try {
-      final uri = Uri.parse('$_backendBaseUrl/api/jobs/$jobId');
-      final res = await http.get(uri).timeout(const Duration(seconds: 4));
+    await connect();
+    _socket?.emit('subscribe_job', jobId);
+  }
 
-      if (res.statusCode == 404) {
-        _upsertJob(
-          jobId: jobId,
-          status: JobStatus.failed,
-          error: 'Job không tồn tại trên server (404)',
-        );
-        _emit('job.status', {'job_id': jobId, 'status': 'failed'});
-        return;
-      }
+  static Map<String, dynamic> adaptResult(Map<String, dynamic> raw) {
+    final image = raw['image'] as Map? ?? {};
+    return {
+      ...raw,
+      'prediction': raw['name'] == 'unknown'
+          ? 'unknown'
+          : raw['scientificName'] ?? raw['name'],
+      'mushroom_name': raw['name'],
+      'raw_prediction': raw['rawPrediction'],
+      'confidence_threshold': raw['confidenceThreshold'],
+      'accepted_prediction': raw['accepted'],
+      'is_poisonous': raw['edibility'] == 'UNKNOWN' ? null : raw['isPoisonous'],
+      'image_type': image['format'],
+      'size_bytes': image['sizeBytes'],
+      'sha256': image['sha256'],
+      'inference_time_seconds': raw['inferenceTimeMs'] is num
+          ? (raw['inferenceTimeMs'] as num) / 1000
+          : null,
+    };
+  }
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final statusStr = data['status']?.toString();
-        final status = JobStatus.fromString(statusStr);
-        final result = data['result'] is Map<String, dynamic>
-            ? data['result'] as Map<String, dynamic>
-            : (data['result'] is Map
-                ? Map<String, dynamic>.from(data['result'] as Map)
-                : null);
-        final error = data['error']?.toString();
-
-        _upsertJob(
+  void _handleEvent(dynamic payload) {
+    if (payload is! Map) return;
+    final data = Map<String, dynamic>.from(payload);
+    final jobId = data['jobId']?.toString();
+    if (jobId == null) return;
+    final status = JobStatus.fromString(data['status']?.toString());
+    final result = data['result'] is Map
+        ? adaptResult(Map<String, dynamic>.from(data['result'] as Map))
+        : null;
+    final error = status == JobStatus.failed
+        ? data['message']?.toString()
+        : null;
+    final now = DateTime.now();
+    final job =
+        _jobs[jobId]?.copyWith(
+          status: status,
+          updatedAt: now,
+          result: result,
+          error: error,
+        ) ??
+        QueueJob(
           jobId: jobId,
           status: status,
+          createdAt: now,
+          updatedAt: now,
           result: result,
           error: error,
         );
-
-        _emit('job.status', {'job_id': jobId, 'status': status.name});
-        if (status == JobStatus.completed || status == JobStatus.failed) {
-          _emit('job.result', {
-            'job_id': jobId,
-            'status': status.name,
-            'result': result,
-            'error': error,
-          });
-          final job = _jobs[jobId];
-          if (job != null) {
-            RecognitionHistoryService.instance.upsertFromJob(job, _backendBaseUrl);
-          }
-        }
-      }
-    } catch (_) {
-      // Ignored during polling
+    _jobs[jobId] = job;
+    _emit('job.status', {'job_id': jobId, 'status': status.name});
+    if (status == JobStatus.completed || status == JobStatus.failed) {
+      _emit('job.result', {
+        'job_id': jobId,
+        'status': status.name,
+        'result': result,
+        'error': error,
+      });
+      unawaited(_saveHistory(job));
     }
   }
 
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      final activeJobs = _jobs.values.where(
-        (j) => j.status == JobStatus.queued || j.status == JobStatus.processing,
-      );
-      for (final j in activeJobs) {
-        fetchJob(j.jobId);
-      }
-    });
-  }
-
-  void _handleWsMessage(dynamic raw) {
-    final text = raw.toString().trim();
-    if (text == 'pong') {
-      _emit('pong', {'timestamp': DateTime.now().toIso8601String()});
-      return;
-    }
-
+  Future<void> _saveHistory(QueueJob job) async {
     try {
-      final decoded = jsonDecode(text);
-      if (decoded is Map<String, dynamic>) {
-        final eventName = (decoded['event'] ?? decoded['type'] ?? 'unknown').toString();
-        final data = decoded['data'] is Map<String, dynamic>
-            ? decoded['data'] as Map<String, dynamic>
-            : (decoded['data'] is Map
-                ? Map<String, dynamic>.from(decoded['data'] as Map)
-                : <String, dynamic>{});
-
-        _emit(eventName, data);
-
-        if (eventName == 'job.status' || eventName == 'job.result') {
-          final jobId = data['job_id']?.toString();
-          if (jobId != null) {
-            final statusStr = data['status']?.toString();
-            final status = JobStatus.fromString(statusStr);
-            final result = data['result'] is Map<String, dynamic>
-                ? data['result'] as Map<String, dynamic>
-                : null;
-            final error = data['error']?.toString();
-
-            _upsertJob(
-              jobId: jobId,
-              status: status,
-              result: result,
-              error: error,
-            );
-
-            final job = _jobs[jobId];
-            if (job != null && (status == JobStatus.completed || status == JobStatus.failed)) {
-              RecognitionHistoryService.instance.upsertFromJob(job, _backendBaseUrl);
-            }
-          }
-        }
-      }
-    } catch (_) {}
-  }
-
-  void _upsertJob({
-    required String jobId,
-    required JobStatus status,
-    Map<String, dynamic>? result,
-    String? error,
-    Uint8List? previewBytes,
-    String? originalMediaPath,
-    String? originalMediaType,
-    Map<String, dynamic>? imageInfo,
-  }) {
-    final existing = _jobs[jobId];
-    final now = DateTime.now();
-
-    if (existing != null) {
-      _jobs[jobId] = existing.copyWith(
-        status: status,
-        updatedAt: now,
-        result: result ?? existing.result,
-        error: error ?? existing.error,
-        previewBytes: previewBytes ?? existing.previewBytes,
-        originalMediaPath: originalMediaPath ?? existing.originalMediaPath,
-        originalMediaType: originalMediaType ?? existing.originalMediaType,
-        imageInfo: imageInfo ?? existing.imageInfo,
+      await RecognitionHistoryService.instance.upsertFromJob(
+        job,
+        _backendBaseUrl,
       );
-    } else {
-      _jobs[jobId] = QueueJob(
-        jobId: jobId,
-        status: status,
-        createdAt: now,
-        updatedAt: now,
-        result: result,
-        error: error,
-        previewBytes: previewBytes,
-        originalMediaPath: originalMediaPath,
-        originalMediaType: originalMediaType,
-        imageInfo: imageInfo ?? const {},
-      );
+    } catch (_) {
+      _emit('history.error', {
+        'message': 'Không lưu được lịch sử trên thiết bị.',
+      });
     }
-  }
-
-  void _scheduleReconnect([Duration delay = const Duration(seconds: 2)]) {
-    if (!_autoReconnectEnabled) return;
-    _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(delay, () {
-      connect(_backendBaseUrl);
-    });
   }
 
   void _emit(String event, Map<String, dynamic> data) {
-    if (!_eventController.isClosed) {
-      _eventController.add(
-        QueueEvent(
-          event: event,
-          timestamp: DateTime.now(),
-          data: data,
-        ),
+    if (!_events.isClosed)
+      _events.add(
+        QueueEvent(event: event, timestamp: DateTime.now(), data: data),
       );
-    }
-  }
-
-  Uri _buildWsUri(String baseHttpUrl) {
-    final normalized = normalizeBaseUrl(baseHttpUrl);
-    final wsPrefix = normalized.startsWith('https://')
-        ? normalized.replaceFirst('https://', 'wss://')
-        : normalized.replaceFirst('http://', 'ws://');
-    return Uri.parse('$wsPrefix/ws/queue');
-  }
-
-  String _detectMediaType(String ext) {
-    switch (ext) {
-      case 'png':
-        return 'png';
-      case 'webp':
-        return 'webp';
-      case 'bmp':
-        return 'bmp';
-      case 'gif':
-        return 'gif';
-      default:
-        return 'jpeg';
-    }
   }
 
   void dispose() {
-    _pollTimer?.cancel();
-    _reconnectTimer?.cancel();
-    _wsSubscription?.cancel();
-    _channel?.sink.close();
-    _eventController.close();
+    _socket?.dispose();
+    _socket = null;
+    unawaited(_events.close());
   }
 }

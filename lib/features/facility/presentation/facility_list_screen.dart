@@ -4,6 +4,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../core/localization/app_text_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/widgets/status_chip.dart';
+import '../../../core/widgets/api_error_view.dart';
 import '../data/facility_model.dart';
 
 // + facility_selector_dialog.dart (gộp trong hàm _openSelector bên dưới)
@@ -23,6 +24,7 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
   List<FacilityModel> _all = [];
   FacilityStatus? _filter;
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -30,40 +32,47 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
-    // TODO(BACKEND): gọi facility_controller (Riverpod) -> facility_repository -> ApiClient.fetchFacilities
-    // TODO(BACKEND): nếu mất mạng, fallback đọc cache từ hive_service.dart
-    final data = await _api.fetchFacilities();
-    setState(() { _all = data; _loading = false; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final data = await _api.fetchFacilities();
+      if (mounted) setState(() => _all = data);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   List<FacilityModel> get _filtered {
     return _all.where((f) {
-      final matchSearch = f.name.toLowerCase().contains(_searchCtrl.text.toLowerCase());
+      final matchSearch = f.name.toLowerCase().contains(
+        _searchCtrl.text.toLowerCase(),
+      );
       final matchStatus = _filter == null || f.status == _filter;
       return matchSearch && matchStatus;
     }).toList();
   }
 
-  void _openSelector(FacilityModel f) {
-    // tương ứng facility_selector_dialog.dart — chọn cơ sở làm việc hiện tại
-    showDialog(
+  void _openSelector(FacilityModel facility) {
+    showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Chuyển sang "${f.name}"?'),
-        content: const Text('Toàn bộ dữ liệu Giống nấm / thống kê sẽ chuyển theo cơ sở này.'),
+        title: Text(facility.name),
+        content: Text(facility.address + ' · ' + _statusLabel(facility.status)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
-          FilledButton(
-            onPressed: () {
-              // TODO(BACKEND): lưu f.id vào SecureStorage/Hive (AppConstants.selectedFacilityKey)
-              // và gọi lại API các màn hình khác theo facility mới.
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Đã chuyển sang ${f.name}')),
-              );
-            },
-            child: const Text('Xác nhận'),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Đóng'),
           ),
         ],
       ),
@@ -71,16 +80,16 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
   }
 
   Color _statusColor(FacilityStatus s) => switch (s) {
-        FacilityStatus.active => AppColors.success,
-        FacilityStatus.paused => AppColors.warning,
-        FacilityStatus.maintenance => AppColors.danger,
-      };
+    FacilityStatus.active => AppColors.success,
+    FacilityStatus.suspended => AppColors.warning,
+    FacilityStatus.closed => AppColors.danger,
+  };
 
   String _statusLabel(FacilityStatus s) => switch (s) {
-        FacilityStatus.active => 'Đang hoạt động',
-        FacilityStatus.paused => 'Tạm dừng',
-        FacilityStatus.maintenance => 'Bảo trì',
-      };
+    FacilityStatus.active => 'Đang hoạt động',
+    FacilityStatus.suspended => 'Tạm dừng',
+    FacilityStatus.closed => 'Đã đóng cửa',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +115,8 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? ApiErrorView(message: _error!, onRetry: _load)
           : RefreshIndicator(
               onRefresh: _load, // TODO(BACKEND): pull-to-refresh gọi lại API
               child: ListView(
@@ -126,28 +137,43 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
                       scrollDirection: Axis.horizontal,
                       children: [
                         _filterChip('Tất cả', null),
-                        ...FacilityStatus.values.map((s) => _filterChip(_statusLabel(s), s)),
+                        ...FacilityStatus.values.map(
+                          (s) => _filterChip(_statusLabel(s), s),
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 12),
-                  ..._filtered.map((f) => Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(14),
-                          leading: const CircleAvatar(
-                            backgroundColor: AppColors.primary,
-                            child: Icon(Icons.factory, color: Colors.white),
-                          ),
-                          title: Text(f.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(f.address, style: const TextStyle(color: AppColors.textSecondary)),
-                          ),
-                          trailing: StatusChip(text: _statusLabel(f.status), color: _statusColor(f.status)),
-                          onTap: () => _openSelector(f),
+                  ..._filtered.map(
+                    (f) => Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(14),
+                        leading: const CircleAvatar(
+                          backgroundColor: AppColors.primary,
+                          child: Icon(Icons.factory, color: Colors.white),
                         ),
-                      )),
+                        title: Text(
+                          f.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            f.address,
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        trailing: StatusChip(
+                          text: _statusLabel(f.status),
+                          color: _statusColor(f.status),
+                        ),
+                        onTap: () => _openSelector(f),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

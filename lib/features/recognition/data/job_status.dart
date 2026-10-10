@@ -66,6 +66,7 @@ enum JobStatus {
         return JobStatus.processing;
       case 'completed':
       case 'success':
+      case 'succeeded':
       case 'done':
         return JobStatus.completed;
       case 'failed':
@@ -76,4 +77,3 @@ enum JobStatus {
     }
   }
 }
-

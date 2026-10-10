@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/localization/app_language.dart';
 import '../core/localization/app_text_scope.dart';
 import '../core/network/farm_api.dart';
+import '../core/services/backend_queue_service.dart';
 import '../core/services/app_preferences_service.dart';
 import 'home_screen.dart';
 import 'theme/app_theme.dart';
@@ -33,6 +34,7 @@ class _MushroomAppState extends State<MushroomApp> {
     unawaited(FarmApi.instance.restoreSession().catchError((Object _) {}));
     try {
       final config = await _prefs.load();
+      BackendQueueService.instance.updateBackendBaseUrl(config.backendBaseUrl);
       if (mounted) {
         setState(() {
           _darkMode = config.darkMode;

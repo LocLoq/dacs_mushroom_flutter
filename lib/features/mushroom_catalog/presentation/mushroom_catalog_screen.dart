@@ -4,6 +4,9 @@ import '../../../app/theme/app_colors.dart';
 import '../../../core/localization/app_text_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/services/backend_queue_service.dart';
+import '../../../core/storage/local_session.dart';
+import '../../../core/network/mock_config.dart';
+import '../../auth/presentation/login_screen.dart';
 import '../../../core/widgets/mushroom_glyph.dart';
 import '../../../core/widgets/mushroom_photo.dart';
 import '../data/catalog_model.dart';
@@ -21,6 +24,7 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
 
   MushroomCatalogResponse? _catalog;
   bool _loading = true;
+  String? _error;
   String? _filterType; // 'all', 'safe', 'poisonous'
 
   @override
@@ -36,15 +40,11 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
   }
 
   Future<void> _loadCatalog() async {
-    setState(() => _loading = true);
-    final baseUrl = BackendQueueService.instance.backendBaseUrl;
-    final res = await _api.fetchMushroomCatalog(baseUrl);
-    if (mounted) {
-      setState(() {
-        _catalog = res;
-        _loading = false;
-      });
-    }
+    setState(() { _loading=true; _error=null; });
+    if (!LocalSession.isLoggedIn && !MockConfig.enabled) { setState(() { _loading=false; _error='Đăng nhập để xem danh mục giống nấm trên máy chủ.'; }); return; }
+    try { final result=await _api.fetchMushroomCatalog(); if(mounted) setState(() => _catalog=result); }
+    catch(error) { if(mounted) setState(() => _error=error.toString()); }
+    finally { if(mounted) setState(() => _loading=false); }
   }
 
   List<MushroomCatalogItem> get _filteredList {
@@ -58,7 +58,7 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
 
       final matchFilter = _filterType == null ||
           _filterType == 'all' ||
-          (_filterType == 'safe' && !m.isPoisonous) ||
+          (_filterType == 'safe' && ['CHOICE','EDIBLE'].contains(m.edibilityStatus)) ||
           (_filterType == 'poisonous' && m.isPoisonous);
 
       return matchQuery && matchFilter;
@@ -164,7 +164,7 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
                                       vi: 'Loài nấm có độc tố nguy hiểm',
                                       en: 'Dangerous poisonous species')
                                   : tr(context,
-                                      vi: 'Loài nấm an toàn / ăn được',
+                                      vi: 'Thông tin phân loại theo danh mục',
                                       en: 'Safe / edible species'),
                               style: TextStyle(
                                 color: tone,
@@ -186,7 +186,7 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
                             )
                           : tr(
                               context,
-                              vi: 'Loài nấm ăn được, thường dùng làm thực phẩm hoặc được nuôi trồng phổ biến trong nông nghiệp.',
+                              vi: 'Xem khả năng ăn được theo thông tin phân loại của loài.',
                               en: 'An edible mushroom, commonly used as food and widely cultivated.',
                             ),
                       style: theme.textTheme.bodyMedium,
@@ -228,6 +228,13 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_error != null) return SafeArea(child:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
+      Padding(padding:const EdgeInsets.all(24),child:Text(_error!,textAlign:TextAlign.center)),
+      FilledButton(onPressed:() async {
+        if(!LocalSession.isLoggedIn) { await Navigator.push(context,MaterialPageRoute(builder:(_) => const LoginScreen())); }
+        if(mounted) await _loadCatalog();
+      },child:Text(LocalSession.isLoggedIn ? 'Thử lại' : 'Đăng nhập')),
+    ])));
     final theme = Theme.of(context);
     final list = _filteredList;
     final c = _catalog;
@@ -465,7 +472,7 @@ class _SpeciesCard extends StatelessWidget {
                               Text(
                                 poison
                                     ? tr(context, vi: 'Có độc', en: 'Poisonous')
-                                    : tr(context, vi: 'An toàn', en: 'Safe'),
+                                    : item.edibilityLabel,
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w800,

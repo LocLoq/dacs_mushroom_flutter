@@ -13,6 +13,7 @@ class ResultPayloadView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if(result['demo'] == true) return const Card(child:Padding(padding:EdgeInsets.all(20),child:Text('KẾT QUẢ MẪU\nChỉ minh họa giao diện. Ảnh này chưa được AI phân tích.')));
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 

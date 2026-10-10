@@ -1,28 +1,30 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../storage/local_session.dart';
 
-/// Chế độ dữ liệu mẫu cho khu "Quản lý": khi BẬT, mọi lệnh gọi của [FarmApi]
-/// được trả lời bởi [MockBackend] trong bộ nhớ, không cần backend thật.
-/// Mặc định BẬT để chạy thử giao diện ngay; tắt ở Cài đặt → API Trại nấm.
 class MockConfig {
   static const _key = 'farm_mock_mode';
-
-  static final ValueNotifier<bool> notifier = ValueNotifier<bool>(true);
-
+  static final notifier = ValueNotifier<bool>(false);
   static bool get enabled => notifier.value;
-
   static Future<void> load() async {
-    final p = await SharedPreferences.getInstance();
-    notifier.value = p.getBool(_key) ?? true;
+    final prefs = await SharedPreferences.getInstance();
+    notifier.value = prefs.getBool(_key) ?? false;
   }
 
   static Future<void> set(bool value) async {
+    if (value != enabled) await LocalSession.logout();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_key, value);
     notifier.value = value;
-    final p = await SharedPreferences.getInstance();
-    await p.setBool(_key, value);
   }
 
-  /// Tài khoản có sẵn trong chế độ mẫu (hiển thị ở màn Đăng nhập).
+  static Future<String?> token() async =>
+      (await SharedPreferences.getInstance()).getString('farm_mock_token');
+  static Future<void> saveToken(String value) async =>
+      (await SharedPreferences.getInstance()).setString(
+        'farm_mock_token',
+        value,
+      );
   static const demoAccounts = <(String, String, String)>[
     ('admin', 'admin123', 'Quản trị viên'),
     ('manager', 'manager123', 'Quản lý'),

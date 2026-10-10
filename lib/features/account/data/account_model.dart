@@ -1,26 +1,30 @@
 enum AccountRole { admin, manager, staff }
 
 class AccountModel {
-  final String id;
-  final String fullName;
+  final String id, username, fullName, phoneNumber, email;
   final AccountRole role;
-  final String assignedFacility;
-  bool isActive;
-  bool mustChangePassword; // true = lần đăng nhập tới bắt buộc đổi mật khẩu
-
-  AccountModel({
+  final int roleId;
+  const AccountModel({
     required this.id,
+    required this.username,
     required this.fullName,
     required this.role,
-    required this.assignedFacility,
-    required this.isActive,
-    this.mustChangePassword = false,
+    required this.roleId,
+    required this.phoneNumber,
+    required this.email,
   });
+  factory AccountModel.fromJson(Map<String, dynamic> json) {
+    final role = json['role'];
+    return AccountModel(
+      id: json['id'].toString(),
+      username: json['username'] as String,
+      fullName: json['full_name'] as String,
+      phoneNumber: json['phone_number'] as String,
+      email: json['email'] as String,
+      roleId: (json['role_id'] as num?)?.toInt() ?? 0,
+      role: AccountRole.values.byName(
+        (role is Map ? role['name'] : role).toString(),
+      ),
+    );
+  }
 }
-
-// ------ Mock data (thay bằng dữ liệu thật từ ApiClient) ------
-final mockAccounts = [
-  AccountModel(id: '1', fullName: 'Nguyễn Văn A', role: AccountRole.admin, assignedFacility: 'Trại Đơn Dương', isActive: true),
-  AccountModel(id: '2', fullName: 'Trần Thị B', role: AccountRole.manager, assignedFacility: 'Trại Đức Trọng', isActive: true),
-  AccountModel(id: '3', fullName: 'Lê Văn C', role: AccountRole.staff, assignedFacility: 'Trại Lạc Dương', isActive: false),
-];

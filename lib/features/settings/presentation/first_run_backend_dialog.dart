@@ -105,8 +105,8 @@ class _FirstRunBackendDialogState extends State<FirstRunBackendDialog> {
             Text(
               tr(
                 context,
-                vi: 'Nhập địa chỉ máy chủ FastAPI (chạy AI và WebSocket hàng đợi):',
-                en: 'Enter FastAPI backend server URL (running AI & queue WebSocket):',
+                vi: 'Nhập địa chỉ máy chủ quản lý và nhận diện nấm:',
+                en: 'Enter the mushroom management server URL:',
               ),
               style: const TextStyle(fontSize: 13),
             ),
@@ -136,7 +136,7 @@ class _FirstRunBackendDialogState extends State<FirstRunBackendDialog> {
         TextButton(
           onPressed: _connecting ? null : _skipOfflineDemo,
           child: Text(
-            tr(context, vi: 'Dùng thử Offline', en: 'Use Offline Demo'),
+            tr(context, vi: 'Để sau', en: 'Set up later'),
           ),
         ),
         FilledButton(
