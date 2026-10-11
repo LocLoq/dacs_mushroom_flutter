@@ -1,0 +1,81 @@
+name: Build iOS IPA (unsigned)
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: 'URL backend (optional, e.g. https://api.example.com)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    name: Build unsigned IPA
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Matches the local SDK and the Dart >=3.11.4 requirement.
+          flutter-version: '3.41.6'
+          channel: stable
+          cache: true
+
+      - name: Prepare Flutter and dependencies
+        run: |
+          flutter config --no-analytics --enable-swift-package-manager
+          flutter --version
+          xcodebuild -version
+          flutter pub get
+
+      - name: Build iOS release without signing
+        env:
+          API_BASE_URL: ${{ inputs.api_base_url || vars.API_BASE_URL }}
+        run: |
+          build_args=(--release --no-codesign --no-pub)
+          if [[ -n "$API_BASE_URL" ]]; then
+            build_args+=("--dart-define=API_BASE_URL=$API_BASE_URL")
+          fi
+          flutter build ios "${build_args[@]}"
+
+      - name: Package unsigned IPA
+        # flutter build ipa --no-codesign skips IPA export; package the app directly.
+        run: |
+          test -d build/ios/iphoneos/Runner.app
+          mkdir -p build/ios/ipa/Payload
+          ditto build/ios/iphoneos/Runner.app build/ios/ipa/Payload/Runner.app
+          cd build/ios/ipa
+          ditto -c -k --keepParent Payload mushroom-unsigned.ipa
+          unzip -t mushroom-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mushroom-ios-unsigned-${{ github.run_number }}
+          path: build/ios/ipa/mushroom-unsigned.ipa
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Write build summary
+        run: |
+          echo 'Download mushroom-ios-unsigned from the Artifacts section of this run.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This IPA is unsigned. Sign it before installing on an iPhone; it cannot be uploaded directly to TestFlight or the App Store.' >> "$GITHUB_STEP_SUMMARY"
