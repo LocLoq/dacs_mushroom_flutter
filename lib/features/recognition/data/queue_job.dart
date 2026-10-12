@@ -26,6 +26,28 @@ class QueueJob {
     this.imageInfo = const {},
   });
 
+  // Pending jobs only need their identity and metadata to resume subscriptions.
+  // Keep image bytes out of preferences.
+  Map<String, dynamic> toPendingJson() => {
+    'jobId': jobId,
+    'status': status.name,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'originalMediaPath': originalMediaPath,
+    'originalMediaType': originalMediaType,
+    'imageInfo': imageInfo,
+  };
+
+  factory QueueJob.fromPendingJson(Map<String, dynamic> json) => QueueJob(
+    jobId: json['jobId'] as String,
+    status: JobStatus.fromString(json['status'] as String?),
+    createdAt: DateTime.parse(json['createdAt'] as String),
+    updatedAt: DateTime.parse(json['updatedAt'] as String),
+    originalMediaPath: json['originalMediaPath'] as String?,
+    originalMediaType: json['originalMediaType'] as String?,
+    imageInfo: Map<String, dynamic>.from(json['imageInfo'] as Map? ?? {}),
+  );
+
   QueueJob copyWith({
     String? jobId,
     JobStatus? status,
@@ -52,4 +74,3 @@ class QueueJob {
     );
   }
 }
-

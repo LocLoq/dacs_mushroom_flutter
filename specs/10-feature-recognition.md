@@ -40,7 +40,7 @@
    - Nút bấm: _"Upload ảnh và tạo job"_.
 4. **Danh sách hàng đợi công việc (Job Queue):**
    - Hiển thị các job đang chờ hoặc vừa hoàn tất trong phiên làm việc.
-   - Hiển thị widget `JobResultCard`: Badge trạng thái (`queued`, `processing`, `completed`, `failed`), thời gian cập nhật, ảnh thu nhỏ.
+   - Hiển thị widget `JobResultCard`: Badge trạng thái (`queued`, `processing`, `retrying`, `completed`, `failed`), thời gian cập nhật, ảnh thu nhỏ.
    - Khi hoàn thành: Nhúng trực tiếp widget `ResultPayloadView`.
 5. **Nhật ký sự kiện thời gian thực (Event Log):**
    - Hiển thị tối đa 10 sự kiện gần nhất nhận được từ WebSocket dạng font Monospace.
@@ -61,6 +61,15 @@
   - Không xác định: Màu cam cảnh báo.
 - **Độ tin cậy:** Định dạng phần trăm chính xác 2 chữ số (ví dụ: `94.52%`).
 - **Bảng chi tiết kỹ thuật (`ResultRow`):** Nhãn dự đoán gốc (`raw_prediction`), Đạt ngưỡng chấp nhận (`accepted_prediction`), Ngưỡng tin cậy (`confidence_threshold`), Lý do quyết định (`decision_reason`), Kích thước ảnh, Thời gian suy luận (`inference_time_seconds`).
+
+## 6. Phục hồi kết nối và thử lại
+
+- Upload qua `POST /api/mushroom-classifier/classify`. Sau phản hồi `202` có `jobId`, lưu các job chưa hoàn tất trên thiết bị theo từng máy chủ. Rời màn hình hoặc mở lại ứng dụng vẫn có thể theo dõi job; không lưu dữ liệu ảnh vào preferences.
+- Mỗi lần Socket.IO kết nối hoặc reconnect, gửi `subscribe_job` cho từng job đang chờ, đang nhận diện hoặc đang chờ thử lại.
+- Sự kiện `processing` đọc trường `status`: `QUEUED` hiển thị “Đang chờ”, `PROCESSING` hiển thị “Đang nhận diện”. Sự kiện `retrying` hiển thị “Đang chờ thử lại”; backend tự retry, client giữ `jobId` và tiếp tục chờ `finished` hoặc `failed`.
+- HTTP `429`: giữ ảnh và khóa nút gửi theo `Retry-After`, hỗ trợ số giây và HTTP-date. Nếu header thiếu hoặc không hợp lệ, chờ 30 giây. Khi hết thời gian, người dùng bấm thử lại; không tự upload.
+- HTTP `503`: thông báo dịch vụ đang gián đoạn và giữ ảnh cho người dùng thử lại. Nếu có `Retry-After`, khóa nút gửi đến khi hết thời gian đó.
+- Nếu mất mạng, timeout hoặc không nhận được `jobId` hợp lệ sau upload, thông báo chưa xác định được máy chủ đã tiếp nhận ảnh hay chưa. Không tự gửi lại; gửi lại thủ công có thể tạo job trùng vì backend chưa hỗ trợ idempotency.
 
 ## Điều hướng từ HomeScreen
 

@@ -7,6 +7,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../core/localization/app_text_scope.dart';
 import '../../../core/services/backend_queue_service.dart';
 import '../../../core/network/mock_config.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/services/frame_selector_service.dart';
 import '../../../core/widgets/mushroom_glyph.dart';
 import '../../../core/widgets/soft_card.dart';
@@ -34,6 +35,11 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
   bool _isPreparing = false;
   String? _prepareError;
   bool _isUploading = false;
+  String? _uploadError;
+  Timer? _cooldownTimer;
+
+  int get _retrySeconds =>
+      (_queue.uploadRetryRemaining.inMilliseconds / 1000).ceil();
 
   final Set<String> _shownResultDialogJobs = {};
   final Set<String> _popupEligibleJobIds = {};
@@ -44,6 +50,7 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
   void initState() {
     super.initState();
     _eventSubscription = _queue.events.listen(_onQueueEvent);
+    _startCooldownTimer();
     if (!_queue.isWebSocketConnected) {
       _queue.connect();
     }
@@ -52,11 +59,27 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
   @override
   void dispose() {
     _eventSubscription?.cancel();
+    _cooldownTimer?.cancel();
     super.dispose();
   }
 
   void _onQueueEvent(QueueEvent event) {
     if (!mounted) return;
+    _startCooldownTimer();
+
+    if (event.event == 'queue.storage_error') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr(
+              context,
+              vi: 'Không lưu được mã nhận diện trên thiết bị. Giữ ứng dụng mở để tiếp tục nhận kết quả.',
+              en: 'Unable to save the job ID on this device. Keep the app open to receive the result.',
+            ),
+          ),
+        ),
+      );
+    }
 
     setState(() {
       _recentEvents.insert(0, event);
@@ -78,7 +101,9 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
           _popupEligibleJobIds.contains(jobId) &&
           !_shownResultDialogJobs.contains(jobId)) {
         _shownResultDialogJobs.add(jobId);
-        final matchingJob = _queue.jobs.where((j) => j.jobId == jobId).firstOrNull;
+        final matchingJob = _queue.jobs
+            .where((j) => j.jobId == jobId)
+            .firstOrNull;
         ResultPopupDialog.show(
           context,
           jobId: jobId,
@@ -89,10 +114,23 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
     }
   }
 
+  void _startCooldownTimer() {
+    if (_retrySeconds == 0 || _cooldownTimer?.isActive == true) return;
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {});
+      if (_retrySeconds == 0) timer.cancel();
+    });
+  }
+
   Future<void> _pickImage(ImageSource source) async {
     setState(() {
       _isPreparing = true;
       _prepareError = null;
+      _uploadError = null;
     });
 
     try {
@@ -119,6 +157,7 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
     setState(() {
       _isPreparing = true;
       _prepareError = null;
+      _uploadError = null;
     });
 
     try {
@@ -142,12 +181,20 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
   }
 
   Future<void> _submitJob() async {
-    if (_preparedFrame == null || _isUploading) return;
+    if (_preparedFrame == null ||
+        _isUploading ||
+        _queue.isUploading ||
+        _retrySeconds > 0) {
+      return;
+    }
 
-    setState(() => _isUploading = true);
+    setState(() {
+      _isUploading = true;
+      _uploadError = null;
+    });
     try {
       final jobId = await _queue.enqueue(_preparedFrame!);
-      if(!mounted) return;
+      if (!mounted) return;
       _popupEligibleJobIds.add(jobId);
       setState(() {
         _isUploading = false;
@@ -169,16 +216,37 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
         );
       }
     } catch (e) {
-      if(!mounted) return;
-      setState(() => _isUploading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi: $e'),
-            backgroundColor: AppColors.danger,
-          ),
+      if (!mounted) return;
+      final String message;
+      if (e is ApiException && e.statusCode == 429) {
+        message = tr(
+          context,
+          vi: 'Máy chủ đang nhận quá nhiều yêu cầu. Chờ hết thời gian bên dưới rồi bấm thử lại. Ảnh đã được giữ lại.',
+          en: 'Too many requests. Wait for the countdown, then tap retry. Your image has been kept.',
         );
+      } else if (e is ApiException && e.statusCode == 503) {
+        message = tr(
+          context,
+          vi: 'Dịch vụ nhận diện đang gián đoạn. Ảnh đã được giữ lại; bạn có thể thử lại sau.',
+          en: 'The recognition service is temporarily unavailable. Your image has been kept; try again later.',
+        );
+      } else if (e is ApiException &&
+          (e.kind == ApiErrorKind.network ||
+              e.kind == ApiErrorKind.timeout ||
+              e.kind == ApiErrorKind.invalidResponse)) {
+        message = tr(
+          context,
+          vi: 'Chưa nhận được mã nhận diện nên chưa xác định được máy chủ đã nhận ảnh hay chưa. Ứng dụng không tự gửi lại. Gửi lại thủ công có thể tạo yêu cầu trùng.',
+          en: 'No job ID was received, so we cannot confirm whether the server accepted the image. The app will not resend automatically. A manual retry may create a duplicate job.',
+        );
+      } else {
+        message = e.toString();
       }
+      setState(() {
+        _isUploading = false;
+        _uploadError = message;
+      });
+      _startCooldownTimer();
     }
   }
 
@@ -188,17 +256,19 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
     final isWsConnected = _queue.isWebSocketConnected;
     final jobs = _queue.jobs;
     final doneCount = jobs.where((j) => j.status == JobStatus.completed).length;
-    final busyCount = jobs
-        .where((j) =>
-            j.status == JobStatus.queued || j.status == JobStatus.processing)
-        .length;
+    final busyCount = jobs.where((j) => j.status.isPending).length;
+    final uploading = _isUploading || _queue.isUploading;
 
     return SafeArea(
       bottom: false,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
-          if(MockConfig.enabled) const Padding(padding:EdgeInsets.only(bottom:12),child:Text('DỮ LIỆU MẪU — kết quả chỉ minh họa giao diện.')),
+          if (MockConfig.enabled)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Text('DỮ LIỆU MẪU — kết quả chỉ minh họa giao diện.'),
+            ),
           // ── Tiêu đề + trạng thái kết nối ──
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -237,7 +307,7 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
 
           // ── Hero: 3 cách nhập ảnh ──
           _HeroCard(
-            busy: _isPreparing,
+            busy: _isPreparing || uploading,
             onCamera: () => _pickImage(ImageSource.camera),
             onGallery: () => _pickImage(ImageSource.gallery),
             onVideo: _pickVideo,
@@ -310,8 +380,11 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.error_outline_rounded,
-                      color: AppColors.danger, size: 20),
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: AppColors.danger,
+                    size: 20,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -328,12 +401,26 @@ class _MushroomRecognitionScreenState extends State<MushroomRecognitionScreen> {
           ],
 
           // ── Ảnh đã chuẩn bị ──
+          if (_uploadError != null) ...[
+            const SizedBox(height: 14),
+            SoftCard(
+              child: Text(
+                _uploadError!,
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ),
+          ],
           if (_preparedFrame != null) ...[
             const SizedBox(height: 16),
             _PreparedCard(
               frame: _preparedFrame!,
-              uploading: _isUploading,
-              onClose: () => setState(() => _preparedFrame = null),
+              uploading: uploading,
+              retrySeconds: _retrySeconds,
+              retryUpload: _uploadError != null,
+              onClose: () => setState(() {
+                _preparedFrame = null;
+                _uploadError = null;
+              }),
               onSubmit: _submitJob,
             ),
           ],
@@ -460,7 +547,10 @@ class _ConnectionPill extends StatelessWidget {
                 Container(
                   width: 8,
                   height: 8,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
                 ),
                 const SizedBox(width: 7),
                 Text(
@@ -563,7 +653,9 @@ class _HeroCard extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: AppColors.primaryDark,
-                    disabledBackgroundColor: Colors.white.withValues(alpha: 0.5),
+                    disabledBackgroundColor: Colors.white.withValues(
+                      alpha: 0.5,
+                    ),
                     minimumSize: const Size(0, 50),
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
@@ -691,12 +783,16 @@ class _StatTile extends StatelessWidget {
 class _PreparedCard extends StatelessWidget {
   final PreparedFrame frame;
   final bool uploading;
+  final int retrySeconds;
+  final bool retryUpload;
   final VoidCallback onClose;
   final VoidCallback onSubmit;
 
   const _PreparedCard({
     required this.frame,
     required this.uploading,
+    required this.retrySeconds,
+    required this.retryUpload,
     required this.onClose,
     required this.onSubmit,
   });
@@ -727,7 +823,7 @@ class _PreparedCard extends StatelessWidget {
                 top: 8,
                 right: 8,
                 child: IconButton(
-                  onPressed: onClose,
+                  onPressed: uploading ? null : onClose,
                   style: IconButton.styleFrom(
                     backgroundColor: Colors.black.withValues(alpha: 0.4),
                     foregroundColor: Colors.white,
@@ -739,8 +835,10 @@ class _PreparedCard extends StatelessWidget {
                 left: 10,
                 bottom: 10,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(20),
@@ -801,7 +899,7 @@ class _PreparedCard extends StatelessWidget {
                 ],
                 const SizedBox(height: 16),
                 FilledButton.icon(
-                  onPressed: uploading ? null : onSubmit,
+                  onPressed: uploading || retrySeconds > 0 ? null : onSubmit,
                   icon: uploading
                       ? const SizedBox(
                           width: 18,
@@ -813,7 +911,19 @@ class _PreparedCard extends StatelessWidget {
                         )
                       : const Icon(Icons.auto_awesome_rounded, size: 20),
                   label: Text(
-                    tr(context, vi: 'Phân tích bằng AI', en: 'Analyze with AI'),
+                    retrySeconds > 0
+                        ? tr(
+                            context,
+                            vi: 'Thử lại sau $retrySeconds giây',
+                            en: 'Retry in $retrySeconds seconds',
+                          )
+                        : retryUpload
+                        ? tr(context, vi: 'Thử lại', en: 'Retry')
+                        : tr(
+                            context,
+                            vi: 'Phân tích bằng AI',
+                            en: 'Analyze with AI',
+                          ),
                   ),
                 ),
               ],

@@ -11,17 +11,44 @@ import '../../features/recognition/data/queue_job.dart';
 import '../network/api_client.dart';
 import '../network/mock_config.dart';
 import 'recognition_history_service.dart';
+import 'recognition_queue_store.dart';
 
 class BackendQueueService {
   static BackendQueueService? _instance;
   static BackendQueueService get instance =>
       _instance ??= BackendQueueService();
-  BackendQueueService([String? initialBaseUrl]) {
+  BackendQueueService([String? initialBaseUrl])
+    : this.withDependencies(initialBaseUrl: initialBaseUrl);
+
+  BackendQueueService.withDependencies({
+    String? initialBaseUrl,
+    ApiClient? apiClient,
+    io.Socket Function(String, Map<String, dynamic>)? socketFactory,
+    Future<void> Function(QueueJob, String)? historyWriter,
+  }) : _api = apiClient ?? ApiClient(),
+       _socketFactory = socketFactory ?? io.io,
+       _historyWriter = historyWriter {
     _backendBaseUrl = normalizeBaseUrl(
       initialBaseUrl ?? AppConstants.kDefaultBackendBaseUrl,
     );
   }
   late String _backendBaseUrl;
+  final ApiClient _api;
+  final io.Socket Function(String, Map<String, dynamic>) _socketFactory;
+  final Future<void> Function(QueueJob, String)? _historyWriter;
+  final _pendingStore = RecognitionQueueStore();
+  Future<void>? _restoreFuture;
+  int _connectionRevision = 0;
+  bool _isUploading = false;
+  bool get isUploading => _isUploading;
+  DateTime? _uploadRetryAt;
+  int? _uploadRetryStatus;
+  Duration get uploadRetryRemaining {
+    final remaining =
+        _uploadRetryAt?.difference(DateTime.now()) ?? Duration.zero;
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
   final _jobs = <String, QueueJob>{};
   final _events = StreamController<QueueEvent>.broadcast();
   io.Socket? _socket;
@@ -38,7 +65,11 @@ class BackendQueueService {
     if (normalized == _backendBaseUrl) return;
     _socket?.dispose();
     _socket = null;
+    _connectionRevision++;
     _jobs.clear();
+    _restoreFuture = null;
+    _uploadRetryAt = null;
+    _uploadRetryStatus = null;
     _backendBaseUrl = normalized;
   }
 
@@ -48,11 +79,14 @@ class BackendQueueService {
       return;
     }
     if (baseUrl != null) updateBackendBaseUrl(baseUrl);
+    final revision = _connectionRevision;
+    await (_restoreFuture ??= _restoreJobs());
+    if (revision != _connectionRevision || _events.isClosed) return;
     if (_socket != null) {
       if (!isWebSocketConnected) _socket!.connect();
       return;
     }
-    final socket = io.io(
+    final socket = _socketFactory(
       _backendBaseUrl,
       io.OptionBuilder()
           .setTransports(['websocket'])
@@ -64,11 +98,7 @@ class BackendQueueService {
     _socket = socket;
     socket.onConnect((_) {
       _emit('ws.connected', {'url': _backendBaseUrl});
-      for (final job in _jobs.values.where(
-        (job) =>
-            job.status == JobStatus.queued ||
-            job.status == JobStatus.processing,
-      )) {
+      for (final job in _jobs.values.where((job) => job.status.isPending)) {
         socket.emit('subscribe_job', job.jobId);
       }
     });
@@ -80,8 +110,8 @@ class BackendQueueService {
         'message': 'Không kết nối được máy chủ. Đang thử lại.',
       }),
     );
-    for (final event in ['processing', 'finished', 'failed']) {
-      socket.on(event, _handleEvent);
+    for (final event in ['processing', 'retrying', 'finished', 'failed']) {
+      socket.on(event, (payload) => _handleEvent(event, payload));
     }
     socket.connect();
   }
@@ -99,8 +129,9 @@ class BackendQueueService {
     updateBackendBaseUrl(baseUrl);
     final connected = Completer<void>();
     final subscription = events.listen((event) {
-      if (event.event == 'ws.connected' && !connected.isCompleted)
+      if (event.event == 'ws.connected' && !connected.isCompleted) {
         connected.complete();
+      }
     });
     try {
       await connect();
@@ -111,6 +142,7 @@ class BackendQueueService {
   }
 
   Future<void> disconnect() async {
+    _connectionRevision++;
     _socket?.dispose();
     _socket = null;
     _emit('ws.closed', {'reason': 'Manual disconnect'});
@@ -122,7 +154,7 @@ class BackendQueueService {
 
   Future<void> _checkServer() async {
     try {
-      await ApiClient().request(
+      await _api.request(
         '/test',
         baseUrl: _backendBaseUrl,
         auth: RequestAuth.none,
@@ -134,12 +166,41 @@ class BackendQueueService {
   }
 
   Future<String> enqueue(PreparedFrame frame) async {
+    if (_isUploading) {
+      throw const ApiException(
+        'Đang gửi ảnh. Vui lòng chờ phản hồi.',
+        kind: ApiErrorKind.validation,
+      );
+    }
+    final retryRemaining = uploadRetryRemaining;
+    if (retryRemaining > Duration.zero) {
+      throw ApiException(
+        'Vui lòng chờ trước khi gửi lại.',
+        statusCode: _uploadRetryStatus,
+        retryAfter: retryRemaining,
+        kind: _uploadRetryStatus == 503
+            ? ApiErrorKind.server
+            : ApiErrorKind.validation,
+      );
+    }
+    _isUploading = true;
+    _emit('upload.status', {'uploading': true});
+    try {
+      return await _enqueue(frame);
+    } finally {
+      _isUploading = false;
+      _emit('upload.status', {'uploading': false});
+    }
+  }
+
+  Future<String> _enqueue(PreparedFrame frame) async {
     final bytes = frame.bytes;
-    if (bytes.lengthInBytes > 5 * 1024 * 1024)
+    if (bytes.lengthInBytes > 5 * 1024 * 1024) {
       throw const ApiException(
         'Ảnh tối đa 5 MB.',
         kind: ApiErrorKind.validation,
       );
+    }
     final type = bytes.length > 3 && bytes[0] == 0xff && bytes[1] == 0xd8
         ? 'jpeg'
         : bytes.length > 8 &&
@@ -155,14 +216,15 @@ class BackendQueueService {
               bytes[9] == 0x45
         ? 'webp'
         : null;
-    if (type == null)
+    if (type == null) {
       throw const ApiException(
         'Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.',
         kind: ApiErrorKind.validation,
       );
+    }
     if (MockConfig.enabled) {
       final now = DateTime.now();
-      final jobId = 'mock-' + now.microsecondsSinceEpoch.toString();
+      final jobId = 'mock-${now.microsecondsSinceEpoch}';
       _jobs[jobId] = QueueJob(
         jobId: jobId,
         status: JobStatus.completed,
@@ -187,7 +249,15 @@ class BackendQueueService {
       unawaited(_saveHistory(_jobs[jobId]!));
       return jobId;
     }
-    final cfg = ApiConfig.fromInput(_backendBaseUrl);
+    final origin = _backendBaseUrl;
+    await (_restoreFuture ??= _restoreJobs());
+    if (origin != _backendBaseUrl) {
+      throw const ApiException(
+        'Máy chủ đã thay đổi. Vui lòng gửi lại.',
+        kind: ApiErrorKind.validation,
+      );
+    }
+    final cfg = ApiConfig.fromInput(origin);
     final request = http.MultipartRequest(
       'POST',
       cfg.endpoint('/mushroom-classifier/classify'),
@@ -196,18 +266,39 @@ class BackendQueueService {
       http.MultipartFile.fromBytes(
         'image',
         bytes,
-        filename: 'upload.' + (type == 'jpeg' ? 'jpg' : type),
+        filename: 'upload.${type == 'jpeg' ? 'jpg' : type}',
         contentType: MediaType('image', type),
       ),
     );
-    final data = await ApiClient().send(
-      request,
-      auth: RequestAuth.optional,
-      serverOrigin: _backendBaseUrl,
-    );
-    final jobId = data['jobId'] as String;
+    late Map<String, dynamic> data;
+    try {
+      data = await _api.send(
+        request,
+        auth: RequestAuth.optional,
+        serverOrigin: origin,
+      );
+    } on ApiException catch (error) {
+      if (origin == _backendBaseUrl &&
+          (error.statusCode == 429 || error.statusCode == 503)) {
+        final delay =
+            error.retryAfter ??
+            (error.statusCode == 429
+                ? const Duration(seconds: 30)
+                : Duration.zero);
+        _uploadRetryAt = DateTime.now().add(delay);
+        _uploadRetryStatus = error.statusCode;
+      }
+      rethrow;
+    }
+    final jobId = data['jobId'];
+    if (jobId is! String || jobId.trim().isEmpty) {
+      throw const ApiException(
+        'Máy chủ không trả về mã nhận diện.',
+        kind: ApiErrorKind.invalidResponse,
+      );
+    }
     final now = DateTime.now();
-    _jobs[jobId] = QueueJob(
+    final job = QueueJob(
       jobId: jobId,
       status: JobStatus.fromString(data['status'] as String?),
       createdAt: now,
@@ -222,20 +313,46 @@ class BackendQueueService {
         'size_bytes': bytes.lengthInBytes,
       },
     );
-    _emit('job.status', {'job_id': jobId, 'status': _jobs[jobId]!.status.name});
-    await connect();
-    _socket?.emit('subscribe_job', jobId);
+    if (origin != _backendBaseUrl) {
+      // The upload was accepted by the previous server; retain its ID there.
+      try {
+        final pending = await _pendingStore.load(origin);
+        await _pendingStore.save(origin, [
+          ...pending.where((j) => j.jobId != jobId),
+          job,
+        ]);
+      } catch (_) {
+        _emitStorageError();
+      }
+      return jobId;
+    }
+    _jobs[jobId] = job;
+    await _persistJobs();
+    _emit('job.status', {'job_id': jobId, 'status': job.status.name});
+    try {
+      if (isWebSocketConnected) {
+        _socket!.emit('subscribe_job', jobId);
+      } else {
+        await connect();
+      }
+    } catch (_) {
+      // The HTTP request has already been accepted; do not suggest reuploading.
+      _emit('ws.error', {
+        'message': 'Đã nhận ảnh. Kết nối lại để nhận kết quả.',
+      });
+    }
     return jobId;
   }
 
   void clearSessionJobs() {
     _jobs.clear();
+    unawaited(_persistJobs());
     _emit('session.reset', {});
   }
 
   Future<void> fetchJob(String jobId) async {
     await connect();
-    _socket?.emit('subscribe_job', jobId);
+    if (isWebSocketConnected) _socket?.emit('subscribe_job', jobId);
   }
 
   static Map<String, dynamic> adaptResult(Map<String, dynamic> raw) {
@@ -259,12 +376,20 @@ class BackendQueueService {
     };
   }
 
-  void _handleEvent(dynamic payload) {
+  void _handleEvent(String event, dynamic payload) {
     if (payload is! Map) return;
     final data = Map<String, dynamic>.from(payload);
     final jobId = data['jobId']?.toString();
-    if (jobId == null) return;
-    final status = JobStatus.fromString(data['status']?.toString());
+    if (jobId == null || !_jobs.containsKey(jobId)) return;
+    final status = event == 'retrying'
+        ? JobStatus.retrying
+        : event == 'finished'
+        ? JobStatus.completed
+        : event == 'failed'
+        ? JobStatus.failed
+        : JobStatus.fromString(data['status']?.toString() ?? 'PROCESSING');
+    // Ignore delayed progress events once a terminal result has arrived.
+    if (!_jobs[jobId]!.status.isPending && status.isPending) return;
     final result = data['result'] is Map
         ? adaptResult(Map<String, dynamic>.from(data['result'] as Map))
         : null;
@@ -272,22 +397,14 @@ class BackendQueueService {
         ? data['message']?.toString()
         : null;
     final now = DateTime.now();
-    final job =
-        _jobs[jobId]?.copyWith(
-          status: status,
-          updatedAt: now,
-          result: result,
-          error: error,
-        ) ??
-        QueueJob(
-          jobId: jobId,
-          status: status,
-          createdAt: now,
-          updatedAt: now,
-          result: result,
-          error: error,
-        );
+    final job = _jobs[jobId]!.copyWith(
+      status: status,
+      updatedAt: now,
+      result: result,
+      error: error,
+    );
     _jobs[jobId] = job;
+    unawaited(_persistJobs());
     _emit('job.status', {'job_id': jobId, 'status': status.name});
     if (status == JobStatus.completed || status == JobStatus.failed) {
       _emit('job.result', {
@@ -302,6 +419,10 @@ class BackendQueueService {
 
   Future<void> _saveHistory(QueueJob job) async {
     try {
+      if (_historyWriter != null) {
+        await _historyWriter(job, _backendBaseUrl);
+        return;
+      }
       await RecognitionHistoryService.instance.upsertFromJob(
         job,
         _backendBaseUrl,
@@ -313,14 +434,44 @@ class BackendQueueService {
     }
   }
 
+  Future<void> _restoreJobs() async {
+    final origin = _backendBaseUrl;
+    try {
+      final pending = await _pendingStore.load(origin);
+      if (origin != _backendBaseUrl || _events.isClosed) return;
+      for (final job in pending) {
+        _jobs.putIfAbsent(job.jobId, () => job);
+      }
+      _emit('session.restored', {'pending_jobs': pending.length});
+    } catch (_) {
+      _emitStorageError();
+    }
+  }
+
+  Future<void> _persistJobs() async {
+    try {
+      await _pendingStore.save(_backendBaseUrl, _jobs.values);
+    } catch (_) {
+      // A local storage failure must not turn an accepted upload into a retry.
+      _emitStorageError();
+    }
+  }
+
+  void _emitStorageError() => _emit('queue.storage_error', {
+    'message':
+        'Không lưu được mã nhận diện trên thiết bị. Giữ ứng dụng mở để tiếp tục nhận kết quả.',
+  });
+
   void _emit(String event, Map<String, dynamic> data) {
-    if (!_events.isClosed)
+    if (!_events.isClosed) {
       _events.add(
         QueueEvent(event: event, timestamp: DateTime.now(), data: data),
       );
+    }
   }
 
   void dispose() {
+    _connectionRevision++;
     _socket?.dispose();
     _socket = null;
     unawaited(_events.close());

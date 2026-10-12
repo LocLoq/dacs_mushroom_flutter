@@ -31,6 +31,25 @@ http.Response jsonResponse(Object data, [int status = 200]) => http.Response(
 void main() {
   tearDown(LocalSession.clear);
   test(
+    'Retry-After accepts seconds and HTTP dates and rejects invalid values',
+    () {
+      final now = DateTime.utc(2026, 10, 12, 5, 42);
+      expect(ApiClient.parseRetryAfter('120'), const Duration(seconds: 120));
+      expect(ApiClient.parseRetryAfter('0'), Duration.zero);
+      expect(
+        ApiClient.parseRetryAfter('Mon, 12 Oct 2026 05:44:00 GMT', now: now),
+        const Duration(minutes: 2),
+      );
+      expect(
+        ApiClient.parseRetryAfter('Mon, 12 Oct 2026 05:40:00 GMT', now: now),
+        Duration.zero,
+      );
+      expect(ApiClient.parseRetryAfter('-1'), isNull);
+      expect(ApiClient.parseRetryAfter('invalid'), isNull);
+      expect(ApiClient.parseRetryAfter(null), isNull);
+    },
+  );
+  test(
     'login verifies /auth/me, persists server affinity, and sends Bearer tokens',
     () async {
       final store = MemoryTokenStore();

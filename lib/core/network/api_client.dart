@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../../features/account/data/account_model.dart';
 import '../../features/cultivation_batch/data/batch_model.dart';
@@ -98,6 +99,7 @@ class ApiClient {
           statusCode: response.statusCode,
           code: code,
           requestId: response.headers['x-request-id'],
+          retryAfter: parseRetryAfter(response.headers['retry-after']),
           kind: response.statusCode == 401
               ? ApiErrorKind.unauthorized
               : response.statusCode == 403
@@ -142,6 +144,22 @@ class ApiClient {
       );
     } finally {
       if (_client == null) client.close();
+    }
+  }
+
+  static Duration? parseRetryAfter(String? value, {DateTime? now}) {
+    if (value == null) return null;
+    final seconds = int.tryParse(value.trim());
+    if (seconds != null) {
+      return seconds >= 0 ? Duration(seconds: seconds) : null;
+    }
+    try {
+      final delay = parseHttpDate(
+        value.trim(),
+      ).difference(now ?? DateTime.now());
+      return delay.isNegative ? Duration.zero : delay;
+    } on FormatException {
+      return null;
     }
   }
 

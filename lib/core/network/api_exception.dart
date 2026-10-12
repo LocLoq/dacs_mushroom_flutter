@@ -14,12 +14,14 @@ class ApiException implements Exception {
     this.statusCode,
     this.code,
     this.requestId,
+    this.retryAfter,
     required this.kind,
   });
   final String message;
   final int? statusCode;
   final String? code, requestId;
   final ApiErrorKind kind;
+  final Duration? retryAfter;
   int get status => statusCode ?? 0;
   bool get isConflict => status == 409;
   bool get isForbidden => status == 403;
