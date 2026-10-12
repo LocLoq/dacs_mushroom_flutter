@@ -23,7 +23,7 @@ List mặc định page 1, limit 10, tối đa 50. Search theo batchCode; server
 
 | Field | Nhập / yêu cầu của app |
 | --- | --- |
-| batchCode | Chuỗi bắt buộc |
+| batchCode | Server tự cấp; chỉ đọc khi sửa, không gửi trong payload |
 | facilityId, mushroomId | ID integer bắt buộc từ picker |
 | status | Bắt buộc, mặc định PREPARATION khi tạo |
 | startDate | Ngày bắt buộc, mặc định hiện tại |
@@ -36,7 +36,6 @@ Enum trạng thái: `PREPARATION` Chuẩn bị; `INCUBATION` Ủ tơ; `FRUITING`
 
 ```json
 {
-  "batchCode": "LO-2026-001",
   "facilityId": 1,
   "mushroomId": 2,
   "status": "PREPARATION",
@@ -48,7 +47,9 @@ Enum trạng thái: `PREPARATION` Chuẩn bị; `INCUBATION` Ủ tơ; `FRUITING`
 }
 ```
 
-Ngày chọn chuyển ISO UTC. Không gửi facility/mushroom lồng, id, cover/count, timestamps hoặc actualYieldKg; sản lượng thực tế lấy theo thu hoạch. Sau tạo tải lại list; lỗi giữ form. Mã trùng hoặc tham chiếu sai do backend trả lỗi, không tạo dòng tạm như đã thành công.
+Ngày chọn chuyển ISO UTC. Không gửi batchCode, facility/mushroom lồng, id, cover/count, timestamps hoặc actualYieldKg; sản lượng thực tế lấy theo thu hoạch. Sau tạo tải lại list; lỗi giữ form.
+
+Mã dạng `LO-CS12-2026-001`: CS12 là ID cơ sở, 2026 là năm của ngày bắt đầu theo UTC+7. Số tăng riêng theo cơ sở/năm, không giới hạn ở 999 và không dùng lại sau khi xóa. Backend cấp số và tạo lô trong cùng transaction. Form tạo hiển thị “Mã lô được cấp tự động khi lưu”; sửa cơ sở/ngày bắt đầu vẫn giữ mã cũ để QR tiếp tục hoạt động. POST có batchCode bị từ chối; PUT chỉ chấp nhận mã hiện tại hoặc bỏ field.
 
 ## Kiểm tra
 

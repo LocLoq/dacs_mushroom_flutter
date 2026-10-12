@@ -4,6 +4,7 @@ class AccountModel {
   final String id, username, fullName, phoneNumber, email;
   final AccountRole role;
   final int roleId;
+  final bool mustChangePassword;
   const AccountModel({
     required this.id,
     required this.username,
@@ -12,6 +13,7 @@ class AccountModel {
     required this.roleId,
     required this.phoneNumber,
     required this.email,
+    this.mustChangePassword = false,
   });
   factory AccountModel.fromJson(Map<String, dynamic> json) {
     final role = json['role'];
@@ -22,6 +24,7 @@ class AccountModel {
       phoneNumber: json['phone_number'] as String,
       email: json['email'] as String,
       roleId: (json['role_id'] as num?)?.toInt() ?? 0,
+      mustChangePassword: json['must_change_password'] == true,
       role: AccountRole.values.byName(
         (role is Map ? role['name'] : role).toString(),
       ),

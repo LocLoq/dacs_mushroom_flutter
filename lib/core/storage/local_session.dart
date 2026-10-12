@@ -19,7 +19,7 @@ class TokenStore {
   Future<void> clear() => _storage.delete(key: 'mushroom_auth_session');
 }
 
-enum SessionStatus { guest, pending, signedIn }
+enum SessionStatus { guest, pending, passwordChangeRequired, signedIn }
 
 class LocalSession {
   static final changes = ValueNotifier<int>(0);
@@ -53,7 +53,17 @@ class LocalSession {
       ? SessionStatus.guest
       : _user == null
       ? SessionStatus.pending
+      : _user?['must_change_password'] == true
+      ? SessionStatus.passwordChangeRequired
       : SessionStatus.signedIn;
+  static bool get mustChangePassword =>
+      status == SessionStatus.passwordChangeRequired;
+  static void requirePasswordChange() {
+    if (_token == null) return;
+    _user = {...?_user, 'must_change_password': true};
+    changes.value++;
+  }
+
   static bool get isPending => status == SessionStatus.pending;
   static int? get userId => (_user?['id'] as num?)?.toInt();
   static String get fullName => _user?['full_name']?.toString() ?? '';
@@ -71,8 +81,9 @@ class LocalSession {
   static bool get isLoggedIn => status == SessionStatus.signedIn;
   static String get username => _user?['username']?.toString() ?? '';
   static String get role => _user?['role']?.toString() ?? '';
-  static bool get canManage => role == 'admin' || role == 'manager';
-  static bool get isAdmin => role == 'admin';
+  static bool get canManage =>
+      isLoggedIn && (role == 'admin' || role == 'manager');
+  static bool get isAdmin => isLoggedIn && role == 'admin';
   static void clear() {
     _token = null;
     _user = null;

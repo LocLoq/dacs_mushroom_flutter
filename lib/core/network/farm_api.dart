@@ -122,6 +122,31 @@ class FarmApi {
     }
   }
 
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    if (MockConfig.enabled) {
+      final response = await post('/auth/change-password', {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      });
+      final token = response['token'] as String;
+      LocalSession.save(
+        token,
+        Map<String, dynamic>.from(response['data'] as Map),
+        serverOrigin: 'mock',
+      );
+      await MockConfig.saveToken(token);
+    } else {
+      try {
+        await _api.changePassword(currentPassword, newPassword);
+      } on transport.ApiException catch (error) {
+        throw ApiException(error.status, error.message, error.code);
+      }
+    }
+  }
+
   Future<void> restoreSession() async {
     await ApiConfig.load();
     await MockConfig.load();

@@ -19,6 +19,8 @@ Tài khoản demo backend đã seed mặc định: demo_admin, demo_manager, dem
 
 ## Dữ liệu mẫu khi không có backend
 
+Backend mới cần schema `must_change_password` và bảng bộ đếm mã lô. Với database đang dùng, chạy migration `sql/account_password_batch_codes.sql` một lần theo RUN_BACKEND.md, sinh lại Prisma client và khởi động lại API trước khi chạy frontend mới. Mã lô được cấp tự động theo cơ sở/năm bắt đầu; mã cũ và QR được giữ nguyên.
+
 Mở **Cài đặt → Dùng dữ liệu mẫu**. App mới cài mặc định dùng API thật; lựa chọn mock được lưu lại. Đổi chế độ sẽ đăng xuất để tách phiên mẫu khỏi phiên thật.
 
 Tài khoản mẫu: admin/admin123, manager/manager123, staff/staff123. Các màn quản lý dùng dữ liệu trong bộ nhớ; thay đổi mẫu không gửi lên backend và không được giữ sau khi khởi động lại. Kết quả nhận diện trong chế độ mẫu ghi rõ là minh họa, ảnh chưa được AI phân tích.

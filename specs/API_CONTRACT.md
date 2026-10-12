@@ -70,6 +70,7 @@ Body lỗi thường `{"message":"...","code":"..."}`; code không bắt buộc.
 | 401 | Xóa phiên nội bộ, chuyển login; không lặp mutation |
 | 403 + AUTH_INVALID_TOKEN | Xóa phiên như token hết hiệu lực |
 | 403 + AUTH_FORBIDDEN | Giữ phiên, thông báo không đủ quyền |
+| 403 + PASSWORD_CHANGE_REQUIRED | Giữ token, đóng màn nội bộ và mở form đổi mật khẩu |
 | 404 | Không tồn tại; GET auth/me có xử lý chờ xác nhận phiên ở S01 |
 | 409 công việc | Tải lại task, thông báo trạng thái đã đổi; không tự gửi lại |
 | 500, 503, mất mạng | Hiện lỗi/tải lại; auth/me có thể giữ token ở trạng thái chờ profile |
@@ -84,6 +85,7 @@ App còn nhận diện thông báo cũ “Token không hợp lệ hoặc đã h�
 | --- | --- | --- |
 | POST /api/login | Công khai; username/password → token | [S01](S01_LOGIN.md) |
 | GET /api/auth/me | A/M/S; profile | [S01](S01_LOGIN.md) |
+| POST /api/auth/change-password | A/M/S, kể cả phiên buộc đổi; current_password/new_password → token/profile mới | [S01](S01_LOGIN.md) |
 | GET /api/dashboard/tasks | A/M/S; paged + filters | [S02](S02_DASHBOARD.md), [S17](S17_TASK_EVIDENCE.md) |
 | POST /api/dashboard/tasks | A/M; TaskCreateInput | [S17](S17_TASK_EVIDENCE.md) |
 | GET /api/dashboard/tasks/{id} | A/M/S; task + submissions | [S17](S17_TASK_EVIDENCE.md) |

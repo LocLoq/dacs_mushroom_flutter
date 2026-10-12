@@ -93,15 +93,15 @@ void main() {
   test('mock resolves an exact encoded QR code and requires login', () async {
     final api = FarmApi();
     await api.login('manager', 'manager123');
-    const code = 'LO / Đà Lạt #01?%';
     final created = await api.post('/cultivation-batches', {
-      'batchCode': code,
       'facilityId': 1,
       'mushroomId': 2,
       'status': 'FRUITING',
       'startDate': '2026-10-11',
     });
     final id = (created['data'] as Map)['id'];
+    final code = (created['data'] as Map)['batchCode'] as String;
+    expect(code, startsWith('LO-CS1-2026-'));
     await api.login('staff', 'staff123');
     expect(
       (await api.get(
@@ -117,21 +117,18 @@ void main() {
     );
     await api.login('manager', 'manager123');
     for (final reserved in ['images', 'expenses']) {
-      final reservedBatch = await api.post('/cultivation-batches', {
-        'batchCode': reserved,
-        'facilityId': 1,
-        'mushroomId': 2,
-        'status': 'FRUITING',
-        'startDate': '2026-10-11',
-      });
-      final reservedId = (reservedBatch['data'] as Map)['id'];
-      await api.login('staff', 'staff123');
-      expect(
-        (await api.get('/cultivation-batches/by-code/$reserved'))['data'],
-        {'id': reservedId, 'batchCode': reserved},
+      await expectLater(
+        api.post('/cultivation-batches', {
+          'batchCode': reserved,
+          'facilityId': 1,
+          'mushroomId': 2,
+          'status': 'FRUITING',
+          'startDate': '2026-10-11',
+        }),
+        throwsA(
+          isA<ApiException>().having((error) => error.status, 'status', 400),
+        ),
       );
-      await api.login('manager', 'manager123');
-      await api.delete('/cultivation-batches/$reservedId');
     }
     await api.delete('/cultivation-batches/$id');
     LocalSession.clear();

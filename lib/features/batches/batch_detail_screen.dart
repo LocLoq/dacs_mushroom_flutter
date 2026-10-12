@@ -80,7 +80,7 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
     final ok = await showFormSheet(
       context,
       title: 'Sửa lô',
-      fields: batchFields(),
+      fields: batchFields(isEdit: true),
       initial: d,
       initialPicks: {
         'facilityId': [

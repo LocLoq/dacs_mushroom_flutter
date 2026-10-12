@@ -171,7 +171,11 @@ void main() {
         client: MockClient((r) async {
           sent.add(r);
           return jsonResponse({
-            'data': {'id': 9},
+            'data': {
+              ...jsonDecode(r.body) as Map<String, dynamic>,
+              'id': 9,
+              'batchCode': 'LO-CS3-2026-001',
+            },
           });
         }),
       );
@@ -186,7 +190,8 @@ void main() {
         startDate: DateTime(2026, 10, 10),
         bagQuantity: 20,
       );
-      await api.saveBatch(batch);
+      final created = await api.saveBatch(batch);
+      expect(created.batchCode, 'LO-CS3-2026-001');
       expect(sent.single.method, 'POST');
       final data = jsonDecode(sent.single.body) as Map;
       expect(data['facilityId'], 3);
@@ -194,10 +199,15 @@ void main() {
       expect(data['status'], 'INCUBATION');
       expect(data.containsKey('id'), isFalse);
       expect(data.containsKey('facilityName'), isFalse);
-      final existing = BatchModel.fromJson({...data, 'id': 9});
+      expect(data.containsKey('batchCode'), isFalse);
+      final existing = created;
       await api.saveBatch(existing);
       expect(sent.last.method, 'PUT');
       expect(sent.last.url.path, '/api/cultivation-batches/9');
+      expect(
+        (jsonDecode(sent.last.body) as Map).containsKey('batchCode'),
+        isFalse,
+      );
     },
   );
 

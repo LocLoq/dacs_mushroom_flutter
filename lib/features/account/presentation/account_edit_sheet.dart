@@ -24,6 +24,7 @@ class _AccountEditSheetState extends State<AccountEditSheet> {
   final _password = TextEditingController(),
       _confirmation = TextEditingController();
   late int _roleId = widget.account.roleId;
+  late bool _mustChangePassword = widget.account.mustChangePassword;
   bool _saving = false;
   String? _error;
   @override
@@ -47,6 +48,7 @@ class _AccountEditSheetState extends State<AccountEditSheet> {
       email: _email.text.trim(),
       roleId: _roleId,
       role: AccountRole.values.byName(role),
+      mustChangePassword: _mustChangePassword,
     );
     setState(() {
       _saving = true;
@@ -142,6 +144,14 @@ class _AccountEditSheetState extends State<AccountEditSheet> {
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
+            CheckboxListTile(
+              title: const Text('Buộc đổi mật khẩu'),
+              value: _mustChangePassword,
+              onChanged: _saving
+                  ? null
+                  : (value) =>
+                        setState(() => _mustChangePassword = value ?? false),
+            ),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: _saving ? null : _save,

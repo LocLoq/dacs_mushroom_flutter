@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/localization/app_language.dart';
 import '../core/localization/app_text_scope.dart';
 import '../core/network/farm_api.dart';
+import '../core/storage/local_session.dart';
 import '../core/services/backend_queue_service.dart';
 import '../core/services/app_preferences_service.dart';
 import 'home_screen.dart';
@@ -18,6 +19,8 @@ class MushroomApp extends StatefulWidget {
 }
 
 class _MushroomAppState extends State<MushroomApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  bool _passwordRequired = false;
   final _prefs = AppPreferencesService.instance;
   bool _darkMode = false;
   AppLanguage _language = AppLanguage.vi;
@@ -26,7 +29,26 @@ class _MushroomAppState extends State<MushroomApp> {
   @override
   void initState() {
     super.initState();
+    LocalSession.changes.addListener(_sessionChanged);
     _bootstrap();
+  }
+
+  void _sessionChanged() {
+    final required = LocalSession.mustChangePassword;
+    if (required && !_passwordRequired) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && LocalSession.mustChangePassword) {
+          _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+        }
+      });
+    }
+    _passwordRequired = required;
+  }
+
+  @override
+  void dispose() {
+    LocalSession.changes.removeListener(_sessionChanged);
+    super.dispose();
   }
 
   Future<void> _bootstrap() async {
@@ -60,11 +82,7 @@ class _MushroomAppState extends State<MushroomApp> {
     if (!_isReady) {
       return const MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          body: Center(
-            child: CircularProgressIndicator(),
-          ),
-        ),
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
       );
     }
 
@@ -74,6 +92,7 @@ class _MushroomAppState extends State<MushroomApp> {
       darkMode: _darkMode,
       onThemeModeChanged: updateTheme,
       child: MaterialApp(
+        navigatorKey: _navigatorKey,
         title: _language == AppLanguage.en
             ? 'Mushroom Management & AI Recognizer'
             : 'Quản lý Sản xuất & Nhận diện Nấm',

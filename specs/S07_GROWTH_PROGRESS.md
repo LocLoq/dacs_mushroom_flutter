@@ -4,7 +4,7 @@
 
 ## Nội dung và form
 
-Card giai đoạn, notes, thời điểm, thumbnail ảnh; mở ảnh xem/phóng to. Server sắp recordedAt giảm dần. Form stage và notes bắt buộc theo app, đều là chuỗi tự do; recordedAt mặc định hiện tại. Có thể ghi **không ảnh** hoặc chọn tối đa 5 ảnh mới JPEG/PNG/WebP, mỗi ảnh ≤5 MiB.
+Card giai đoạn, notes, thời điểm, thumbnail ảnh; mở ảnh xem/phóng to. Server sắp recordedAt giảm dần. Form stage và notes bắt buộc theo app. Giai đoạn dùng combobox: chọn Chuẩn bị, Ủ tơ, Ra quả thể, Thu hoạch, Kết thúc hoặc nhập nội dung khác; gửi stage đã trim và giữ giai đoạn tùy chỉnh khi sửa. Không tự chọn giai đoạn khi tạo. recordedAt mặc định hiện tại. Có thể ghi **không ảnh** hoặc chọn tối đa 5 ảnh mới JPEG/PNG/WebP, mỗi ảnh ≤5 MiB.
 
 Khi sửa, hiển thị ảnh server hiện có để xem và vùng chọn ảnh mới riêng. Remove trong selector chỉ bỏ ảnh mới chưa gửi; không xóa ảnh đã lưu. PATCH thêm ảnh vào record, không thay thế tất cả ảnh cũ.
 

@@ -124,10 +124,10 @@ void main() {
           startDate: DateTime.now(),
           bagQuantity: 3,
         );
-        await api.saveBatch(batch);
+        final createdBatch = await api.saveBatch(batch);
         final batchRows = await api.fetchRawList(
           '/cultivation-batches',
-          query: {'search': tag},
+          query: {'search': createdBatch.batchCode},
         );
         final batchId = batchRows.single['id'].toString();
         cleanup.insert(0, '/cultivation-batches/' + batchId);
@@ -141,7 +141,11 @@ void main() {
           'INCUBATION',
         );
         await expectLater(
-          api.saveBatch(batch),
+          api.request(
+            '/cultivation-batches',
+            method: 'POST',
+            data: batch.toJson(),
+          ),
           throwsA(
             isA<ApiException>().having(
               (error) => error.statusCode,

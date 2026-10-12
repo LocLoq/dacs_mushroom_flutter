@@ -28,6 +28,7 @@ class MockBackend {
   final List<J> _audit = [];
   final List<J> _history = [];
   final Map<int, String> _pw = {};
+  final Map<String, int> _batchCounters = {};
   final Map<int, List<J>> _care = {};
   final Map<int, List<J>> _harvests = {};
   final Map<int, List<J>> _growth = {};
@@ -336,7 +337,7 @@ class MockBackend {
   /// Người dùng của token hiện tại. Token sai/hết hạn -> 401 và xóa phiên (giống server thật).
   J _me() {
     final t = LocalSession.token;
-    final found = _users.where((u) => 'mock-${u.s('username')}' == t).toList();
+    final found = _users.where((u) => _tokenFor(u) == t).toList();
     if (found.isEmpty) {
       LocalSession.clear();
       throw _err(
@@ -347,6 +348,18 @@ class MockBackend {
     }
     return found.first;
   }
+
+  String _tokenFor(J u) =>
+      'mock-${u.s('username')}${(u.i('tokenver') ?? 0) == 0 ? '' : '-v${u.i('tokenver')}'}';
+  J _profile(J u) => {
+    'id': u['id'],
+    'username': u['username'],
+    'full_name': u['full_name'],
+    'role': _roleName(u.i('role_id')),
+    'email': u['email'],
+    'phone_number': u['phone_number'],
+    'must_change_password': u['must_change_password'] == true,
+  };
 
   String _role() => _roleName(_me().i('role_id'));
 
@@ -467,6 +480,24 @@ class MockBackend {
     final b = body is Map
         ? Map<String, dynamic>.from(body)
         : <String, dynamic>{};
+    final isAuth =
+        s.length == 2 &&
+        s[0] == 'auth' &&
+        ((s[1] == 'me' && method == 'GET') ||
+            (s[1] == 'change-password' && method == 'POST'));
+    final isPublic =
+        public || (s.isNotEmpty && (s[0] == 'login' || s[0] == 'public'));
+    if (!isAuth &&
+        !isPublic &&
+        LocalSession.token != null &&
+        _me()['must_change_password'] == true) {
+      LocalSession.requirePasswordChange();
+      throw _err(
+        403,
+        'Bạn cần đổi mật khẩu trước khi tiếp tục.',
+        'PASSWORD_CHANGE_REQUIRED',
+      );
+    }
     final out = _route(method, s, q, b, fields, files, publicRead: public);
     return jsonDecode(jsonEncode(out))
         as Map<String, dynamic>; // bản sao sâu, giống dữ liệu qua mạng
@@ -516,14 +547,30 @@ class MockBackend {
         return _login(b);
       case 'auth':
         final u = _me();
-        return {
-          'data': {
-            'id': u['id'],
-            'username': u['username'],
-            'full_name': u['full_name'],
-            'role': _roleName(u.i('role_id')),
-          },
-        };
+        if (s.length == 2 && s[1] == 'change-password' && m == 'POST') {
+          final current = b['current_password'];
+          final next = b['new_password'];
+          if (current is! String ||
+              current.isEmpty ||
+              next is! String ||
+              next.isEmpty ||
+              next == current) {
+            throw _err(400, 'Mật khẩu mới phải khác mật khẩu hiện tại.');
+          }
+          if (_pw[u.i('id')] != current)
+            throw _err(400, 'Mật khẩu hiện tại không đúng.');
+          _pw[u.i('id')!] = next;
+          u['must_change_password'] = false;
+          u['tokenver'] = (u.i('tokenver') ?? 0) + 1;
+          return {
+            'message': 'Đổi mật khẩu thành công',
+            'token': _tokenFor(u),
+            'data': _profile(u),
+          };
+        }
+        if (s.length != 2 || s[1] != 'me' || m != 'GET')
+          throw _err(404, 'Không tìm thấy đường dẫn.');
+        return {'data': _profile(u)};
       case 'public':
         return _publicGrowth(s);
       case 'cultivation-batches':
@@ -566,7 +613,7 @@ class MockBackend {
     }
     final u = found.first;
     return {
-      'token': 'mock-$name',
+      'token': _tokenFor(u),
       'data': {
         'id': u['id'],
         'username': name,
@@ -995,10 +1042,12 @@ class MockBackend {
   ];
 
   J _batchSave(J? existing, J b) {
-    _req(b, ['batchCode', 'facilityId', 'mushroomId', 'status', 'startDate']);
-    final code = b['batchCode'].toString().trim();
-    if (_batches.any((x) => x.s('batchCode') == code && x != existing)) {
-      throw _err(409, 'Mã lô "$code" đã tồn tại.', 'CONFLICT');
+    _req(b, ['facilityId', 'mushroomId', 'status', 'startDate']);
+    if (b.containsKey('batchCode')) {
+      if (existing == null || b['batchCode'] != existing['batchCode']) {
+        throw _err(400, 'Mã lô được cấp tự động và không được thay đổi.');
+      }
+      b.remove('batchCode');
     }
     if (!_facilities.any(
       (x) => x.i('id') == (b['facilityId'] as num?)?.toInt(),
@@ -1007,6 +1056,26 @@ class MockBackend {
     if (!_species.any((x) => x.i('id') == (b['mushroomId'] as num?)?.toInt()))
       throw _err(422, 'Giống nấm không tồn tại.', 'VALIDATION_ERROR');
     final x = existing ?? <String, dynamic>{'id': _next()};
+    if (existing == null) {
+      final date = DateTime.tryParse(b['startDate'].toString());
+      if (date == null) throw _err(400, 'Ngày bắt đầu không hợp lệ.');
+      final year = date.toUtc().add(const Duration(hours: 7)).year;
+      final facility = b['facilityId'];
+      final key = '$facility:$year';
+      var number = _batchCounters[key] ?? 0;
+      final prefix = 'LO-CS$facility-$year-';
+      for (final batch in _batches) {
+        if (batch.s('batchCode').startsWith(prefix)) {
+          number = max(
+            number,
+            int.tryParse(batch.s('batchCode').substring(prefix.length)) ?? 0,
+          );
+        }
+      }
+      number++;
+      _batchCounters[key] = number;
+      x['batchCode'] = '$prefix${number.toString().padLeft(3, '0')}';
+    }
     _copy(x, b, _batchKeys);
     if (existing == null) _batches.add(x);
     _log(
@@ -1636,10 +1705,15 @@ class MockBackend {
 
   J _userOut(J u) => {
     ...u,
+    'must_change_password': u['must_change_password'] == true,
     'role': {'id': u['role_id'], 'name': _roleName(u.i('role_id'))},
   };
 
   J _adminRoute(String m, List<String> s, J q, J b) {
+    if (b.containsKey('must_change_password') &&
+        b['must_change_password'] is! bool) {
+      throw _err(400, 'must_change_password phải là Boolean.');
+    }
     if (s.length < 2) throw _err(404, 'Không tìm thấy đường dẫn.');
     if (s[1] == 'audit-logs') {
       _need(['admin', 'manager']);
@@ -1714,6 +1788,7 @@ class MockBackend {
           'email': b['email'],
           'phone_number': b['phone_number'],
           'role_id': rid,
+          'must_change_password': b['must_change_password'] ?? false,
         };
         _users.add(u);
         _pw[u['id'] as int] = b['password'].toString();
@@ -1728,9 +1803,18 @@ class MockBackend {
     if (m == 'GET') return {'data': _userOut(_users[i])};
     if (m == 'PUT') {
       _req(b, ['full_name']);
-      _copy(_users[i], b, ['full_name', 'phone_number', 'email', 'role_id']);
+      _copy(_users[i], b, [
+        'full_name',
+        'phone_number',
+        'email',
+        'role_id',
+        'must_change_password',
+      ]);
       final pw = b['password']?.toString() ?? '';
       if (pw.isNotEmpty) _pw[uid!] = pw;
+      if (pw.isNotEmpty || b.containsKey('role_id')) {
+        _users[i]['tokenver'] = (_users[i].i('tokenver') ?? 0) + 1;
+      }
       _log('USER_UPDATE', 'USER', uid);
       return {'data': _userOut(_users[i])};
     }

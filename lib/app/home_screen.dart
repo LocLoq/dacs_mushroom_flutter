@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/localization/app_text_scope.dart';
+import '../core/storage/local_session.dart';
 import '../core/widgets/mushroom_glyph.dart';
 import '../features/manage/presentation/manage_hub_screen.dart';
 import '../features/mushroom_catalog/presentation/mushroom_catalog_screen.dart';
@@ -36,9 +37,30 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _index = widget.initialIndex.clamp(0, 4);
     _visited.add(_index);
+    LocalSession.changes.addListener(_sessionChanged);
+    if (LocalSession.mustChangePassword) {
+      _index = kPageManage;
+      _visited.clear();
+      _visited.add(_index);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FirstRunBackendDialog.checkAndShow(context);
     });
+  }
+
+  void _sessionChanged() {
+    if (!mounted || !LocalSession.mustChangePassword) return;
+    setState(() {
+      _index = kPageManage;
+      _visited.clear();
+      _visited.add(_index);
+    });
+  }
+
+  @override
+  void dispose() {
+    LocalSession.changes.removeListener(_sessionChanged);
+    super.dispose();
   }
 
   void _select(int i) {
@@ -66,18 +88,37 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<_Dest> _destinations(BuildContext context) => [
-        _Dest(kPageScan, Icons.center_focus_strong_outlined,
-            Icons.center_focus_strong_rounded,
-            tr(context, vi: 'Quét', en: 'Scan')),
-        _Dest(kPageCatalog, Icons.menu_book_outlined, Icons.menu_book_rounded,
-            tr(context, vi: 'Từ điển', en: 'Catalog')),
-        _Dest(kPageHistory, Icons.history_rounded, Icons.history_rounded,
-            tr(context, vi: 'Lịch sử', en: 'History')),
-        _Dest(kPageManage, Icons.grid_view_outlined, Icons.grid_view_rounded,
-            tr(context, vi: 'Quản lý', en: 'Manage')),
-        _Dest(kPageSettings, Icons.settings_outlined, Icons.settings_rounded,
-            tr(context, vi: 'Cài đặt', en: 'Settings')),
-      ];
+    _Dest(
+      kPageScan,
+      Icons.center_focus_strong_outlined,
+      Icons.center_focus_strong_rounded,
+      tr(context, vi: 'Quét', en: 'Scan'),
+    ),
+    _Dest(
+      kPageCatalog,
+      Icons.menu_book_outlined,
+      Icons.menu_book_rounded,
+      tr(context, vi: 'Từ điển', en: 'Catalog'),
+    ),
+    _Dest(
+      kPageHistory,
+      Icons.history_rounded,
+      Icons.history_rounded,
+      tr(context, vi: 'Lịch sử', en: 'History'),
+    ),
+    _Dest(
+      kPageManage,
+      Icons.grid_view_outlined,
+      Icons.grid_view_rounded,
+      tr(context, vi: 'Quản lý', en: 'Manage'),
+    ),
+    _Dest(
+      kPageSettings,
+      Icons.settings_outlined,
+      Icons.settings_rounded,
+      tr(context, vi: 'Cài đặt', en: 'Settings'),
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -149,12 +190,12 @@ class _BottomBar extends StatelessWidget {
     final centerSelected = index == center.page;
 
     Widget item(_Dest d) => Expanded(
-          child: _NavItem(
-            dest: d,
-            selected: index == d.page,
-            onTap: () => onSelect(d.page),
-          ),
-        );
+      child: _NavItem(
+        dest: d,
+        selected: index == d.page,
+        onTap: () => onSelect(d.page),
+      ),
+    );
 
     return SafeArea(
       top: false,
@@ -200,8 +241,9 @@ class _BottomBar extends StatelessWidget {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.primaryDark
-                                  .withValues(alpha: 0.35),
+                              color: AppColors.primaryDark.withValues(
+                                alpha: 0.35,
+                              ),
                               blurRadius: 14,
                               offset: const Offset(0, 6),
                             ),
@@ -322,7 +364,10 @@ class _SideRail extends StatelessWidget {
             ),
             for (final d in dests)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 3,
+                ),
                 child: Material(
                   color: index == d.page
                       ? scheme.primaryContainer

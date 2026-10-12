@@ -10,6 +10,7 @@ import '../../../core/widgets/mushroom_glyph.dart';
 import '../../../core/widgets/soft_card.dart';
 import '../../audit/audit_log_screen.dart';
 import '../../auth/presentation/login_screen.dart';
+import '../../auth/presentation/change_password_form.dart';
 import '../../batches/batch_list_screen.dart';
 import '../../batch_qr/batch_qr_actions.dart';
 import '../../dashboard/dashboard_section.dart';
@@ -144,6 +145,8 @@ class _ManageHubScreenState extends State<ManageHubScreen> {
                   ),
                 if (status == SessionStatus.guest) ..._guest(context),
                 if (status == SessionStatus.pending) _pending(context),
+                if (status == SessionStatus.passwordChangeRequired)
+                  const ChangePasswordForm(),
                 if (status == SessionStatus.signedIn) ..._signedIn(context),
               ],
             ),

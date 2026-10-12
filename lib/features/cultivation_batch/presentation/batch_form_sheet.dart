@@ -116,13 +116,9 @@ class _BatchFormSheetState extends State<BatchFormSheet> {
   };
 
   Future<void> _submit() async {
-    if (_codeCtrl.text.trim().isEmpty ||
-        _facilityId == null ||
-        _mushroomId == null) {
+    if (_facilityId == null || _mushroomId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vui lòng nhập mã lô, chọn cơ sở và giống nấm'),
-        ),
+        const SnackBar(content: Text('Vui lòng chọn cơ sở và giống nấm')),
       );
       return;
     }
@@ -211,7 +207,12 @@ class _BatchFormSheetState extends State<BatchFormSheet> {
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            CustomTextField(label: 'Mã lô (batch_code)', controller: _codeCtrl),
+            InputDecorator(
+              decoration: const InputDecoration(labelText: 'Mã lô'),
+              child: Text(
+                widget.existing?.batchCode ?? 'Mã lô được cấp tự động khi lưu',
+              ),
+            ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _facilityId,

@@ -25,12 +25,12 @@ class BatchListScreen extends StatefulWidget {
 }
 
 /// Form dùng chung tạo/sửa lô.
-List<FieldDef> batchFields() => [
-  const FieldDef(
+List<FieldDef> batchFields({bool isEdit = false}) => [
+  FieldDef(
     'batchCode',
-    'Mã lô',
+    isEdit ? 'Mã lô' : 'Mã lô được cấp tự động khi lưu',
     FieldType.text,
-    required: true,
+    readOnly: true,
     maxLen: 191,
   ),
   FieldDef(

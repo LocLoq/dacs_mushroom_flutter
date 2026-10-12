@@ -88,7 +88,14 @@ class ApiClient {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final code = decoded is Map ? decoded['code']?.toString() : null;
         if (auth != RequestAuth.none &&
-            (response.statusCode == 401 || code == 'AUTH_INVALID_TOKEN')) {
+            code == 'PASSWORD_CHANGE_REQUIRED' &&
+            LocalSession.tokenFor(serverOrigin) == bearer) {
+          LocalSession.requirePasswordChange();
+        }
+        if (auth != RequestAuth.none &&
+            (response.statusCode == 401 || code == 'AUTH_INVALID_TOKEN') &&
+            (LocalSession.token == null ||
+                LocalSession.tokenFor(serverOrigin) == bearer)) {
           LocalSession.clear();
           await _store.clear();
         }
@@ -221,6 +228,45 @@ class ApiClient {
   Future<Map<String, dynamic>> fetchProfile() async =>
       Map<String, dynamic>.from((await request('/auth/me'))['data'] as Map);
 
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    final cfg = await config();
+    final previousToken = LocalSession.tokenFor(cfg.serverOrigin.toString());
+    final response = await request(
+      '/auth/change-password',
+      method: 'POST',
+      baseUrl: cfg.serverOrigin.toString(),
+      data: {'current_password': currentPassword, 'new_password': newPassword},
+    );
+    if ((await config()).serverOrigin != cfg.serverOrigin ||
+        LocalSession.tokenFor(cfg.serverOrigin.toString()) != previousToken) {
+      throw const ApiException(
+        'Phiên đăng nhập đã thay đổi.',
+        kind: ApiErrorKind.unauthorized,
+      );
+    }
+    final token = response['token'];
+    final data = response['data'];
+    if (token is! String ||
+        token.isEmpty ||
+        data is! Map ||
+        data['must_change_password'] != false ||
+        !['admin', 'manager', 'staff'].contains(data['role'])) {
+      throw const ApiException(
+        'Phản hồi đổi mật khẩu không hợp lệ.',
+        kind: ApiErrorKind.invalidResponse,
+      );
+    }
+    await _store.write(token, cfg.serverOrigin.toString());
+    LocalSession.save(
+      token,
+      Map<String, dynamic>.from(data),
+      serverOrigin: cfg.serverOrigin.toString(),
+    );
+  }
+
   Future<List<Map<String, dynamic>>> fetchRawList(
     String path, {
     Map<String, dynamic>? query,
@@ -275,11 +321,15 @@ class ApiClient {
   Future<List<BatchModel>> fetchBatches() async => (await fetchRawList(
     '/cultivation-batches',
   )).map(BatchModel.fromJson).toList();
-  Future<void> saveBatch(BatchModel batch) async {
-    await request(
+  Future<BatchModel> saveBatch(BatchModel batch) async {
+    final body = batch.toJson()..remove('batchCode');
+    final response = await request(
       '/cultivation-batches${batch.id.isEmpty ? '' : '/${batch.id}'}',
       method: batch.id.isEmpty ? 'POST' : 'PUT',
-      data: batch.toJson(),
+      data: body,
+    );
+    return BatchModel.fromJson(
+      Map<String, dynamic>.from(response['data'] as Map),
     );
   }
 
@@ -295,6 +345,7 @@ class ApiClient {
         'full_name': account.fullName,
         'phone_number': account.phoneNumber,
         'email': account.email,
+        'must_change_password': account.mustChangePassword,
         'role_id': account.roleId,
         if (password != null && password.isNotEmpty) 'password': password,
       },

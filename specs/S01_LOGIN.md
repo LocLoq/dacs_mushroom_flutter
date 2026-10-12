@@ -20,7 +20,8 @@ Khởi động app: đọc token đã lưu → GET auth/me chạy nền, không 
 | Method / path | Body / response | Thời điểm |
 | --- | --- | --- |
 | POST /api/login | `{username,password}` → 200 `{message,token}` | Submit login, không Authorization |
-| GET /api/auth/me | 200 `{data:{id,username,full_name,role,email,phone_number}}` | Sau login, restore, retry session; Bearer |
+| GET /api/auth/me | 200 `{data:{id,username,full_name,role,email,phone_number,must_change_password}}` | Sau login, restore, retry session; Bearer |
+| POST /api/auth/change-password | `{current_password,new_password}` → `{message,token,data}` | Đổi mật khẩu cá nhân; Bearer |
 
 ```json
 {
@@ -42,7 +43,11 @@ Profile ví dụ:
 }
 ```
 
-Password sai → 401. Không có đăng ký, quên mật khẩu hoặc refresh-token API trong app hiện tại. Không log password/token.
+Password sai khi đăng nhập → 401. Không có đăng ký, quên mật khẩu hoặc refresh-token API trong app hiện tại. Không log password/token.
+
+Profile có `must_change_password: true` chuyển phiên sang `passwordChangeRequired`, đóng route nội bộ đang mở và hiển thị form đổi mật khẩu ở tab Quản lý. Chức năng công khai và đăng xuất vẫn khả dụng. Backend chặn API nội bộ khác bằng `403 PASSWORD_CHANGE_REQUIRED`; client giữ token và mở form, không coi là lỗi quyền thông thường. Luồng này áp dụng cả login, restore và khi quản trị viên bật cờ giữa phiên.
+
+Form yêu cầu mật khẩu hiện tại, mật khẩu mới và xác nhận khớp. Không trim mật khẩu. Mật khẩu mới phải không rỗng và khác mật khẩu cũ. Sai mật khẩu hiện tại trả 400 và giữ form/phiên. Thành công: backend lưu bcrypt, xóa cờ, tăng tokenver nguyên tử và trả token/profile mới; Flutter lưu token thay thế, mở chức năng nội bộ. Token cũ không còn hợp lệ.
 
 ## Kiểm tra
 

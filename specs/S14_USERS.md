@@ -18,7 +18,7 @@ Mỗi lần mở form gọi GET roles trước; **không hardcode role_id**. S�
 | PUT /api/admin/users/{id} | JSON field cho phép → 200 message/data |
 | DELETE /api/admin/users/{id} | 200 message |
 
-Role: `{id:integer,name:"admin"|"manager"|"staff"}`. User list gồm `id,username,full_name,phone_number,email,role_id,role:{name}` và có thể metadata hệ thống. DTO role **khác** auth/me.role string.
+Role: `{id:integer,name:"admin"|"manager"|"staff"}`. User list gồm `id,username,full_name,phone_number,email,role_id,must_change_password,role:{name}` và có thể metadata hệ thống. DTO role **khác** auth/me.role string.
 
 ## Field và payload
 
@@ -46,7 +46,9 @@ Sửa: `full_name` bắt buộc; `phone_number,email` chỉ mở sửa khi row c
 
 Backend hiện cập nhật các field liên hệ theo giá trị truthy: **null/chuỗi rỗng không xóa phone/email**, giữ giá trị cũ. Không hứa chức năng xóa liên hệ chưa được backend hỗ trợ. Gửi role_id/password làm tăng phiên bản token; app bỏ role_id không đổi để sửa liên hệ không vô tình làm token mất hiệu lực. Đổi role/password thật có thể buộc user đăng nhập lại.
 
-Không có role CRUD, trang self-profile hoặc reset-password riêng. Lỗi xóa do tham chiếu/validation hiển thị message, không tự xóa row.
+Form tạo/sửa có checkbox “Buộc đổi mật khẩu”, tạo mặc định false, sửa lấy cờ hiện tại. Có thể tick mà không đặt lại mật khẩu. Payload `must_change_password` chỉ nhận Boolean; không gửi khi PUT thì giữ nguyên. Dòng có cờ true hiển thị “Chờ đổi mật khẩu”. Sửa liên hệ/vai trò không tự xóa cờ. Middleware kiểm tra cờ mỗi request, kể cả token đã cấp trước đó; xem luồng đổi mật khẩu tại S01.
+
+Không có role CRUD hoặc reset-password riêng cho quản trị viên. Lỗi xóa do tham chiếu/validation hiển thị message, không tự xóa row.
 
 ## Kiểm tra
 

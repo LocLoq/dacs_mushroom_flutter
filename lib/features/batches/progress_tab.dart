@@ -18,7 +18,11 @@ class ProgressTab extends StatefulWidget {
   final int batchId;
   final VoidCallback onChanged;
 
-  const ProgressTab({super.key, required this.batchId, required this.onChanged});
+  const ProgressTab({
+    super.key,
+    required this.batchId,
+    required this.onChanged,
+  });
 
   @override
   State<ProgressTab> createState() => _ProgressTabState();
@@ -29,7 +33,8 @@ class _ProgressTabState extends State<ProgressTab> {
 
   String get _base => '/cultivation-batches/${widget.batchId}/growth-progress';
 
-  Future<List<J>> _load() async => (await FarmApi.instance.get(_base)).l('data');
+  Future<List<J>> _load() async =>
+      (await FarmApi.instance.get(_base)).l('data');
 
   Future<void> _openForm({J? record}) async {
     final ok = await showModalBottomSheet<bool>(
@@ -37,7 +42,10 @@ class _ProgressTabState extends State<ProgressTab> {
       isScrollControlled: true,
       useSafeArea: true,
       constraints: const BoxConstraints(maxWidth: 680),
-      builder: (_) => GrowthForm(path: record == null ? _base : '$_base/${record.i('id')}', record: record),
+      builder: (_) => GrowthForm(
+        path: record == null ? _base : '$_base/${record.i('id')}',
+        record: record,
+      ),
     );
     if (ok == true) {
       _key.currentState?.reload();
@@ -65,44 +73,67 @@ class _ProgressTabState extends State<ProgressTab> {
           key: _key,
           load: _load,
           builder: (ctx, items, _) {
-            if (items.isEmpty) return const SizedBox(height: 140, child: EmptyView('Chưa có nhật ký sinh trưởng.'));
-            return Column(children: [
-              for (final r in items)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: SoftCard(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(children: [
-                        Expanded(child: Text(r.s('stage'), style: theme.textTheme.titleSmall)),
-                        Text(fmtDateTime(r.sn('recordedAt')), style: theme.textTheme.bodySmall),
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          onPressed: () => _openForm(record: r),
-                          icon: const Icon(Icons.edit_outlined, size: 18),
-                        ),
-                      ]),
-                      Text(r.s('notes')),
-                      if (r.l('images').isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          height: 72,
-                          child: ListView(
-                            scrollDirection: Axis.horizontal,
+            if (items.isEmpty)
+              return const SizedBox(
+                height: 140,
+                child: EmptyView('Chưa có nhật ký sinh trưởng.'),
+              );
+            return Column(
+              children: [
+                for (final r in items)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: SoftCard(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              for (final img in r.l('images'))
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: NetImage(img.sn('imageUrl'), width: 72, height: 72),
+                              Expanded(
+                                child: Text(
+                                  r.s('stage'),
+                                  style: theme.textTheme.titleSmall,
                                 ),
+                              ),
+                              Text(
+                                fmtDateTime(r.sn('recordedAt')),
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () => _openForm(record: r),
+                                icon: const Icon(Icons.edit_outlined, size: 18),
+                              ),
                             ],
                           ),
-                        ),
-                      ],
-                    ]),
+                          Text(r.s('notes')),
+                          if (r.l('images').isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              height: 72,
+                              child: ListView(
+                                scrollDirection: Axis.horizontal,
+                                children: [
+                                  for (final img in r.l('images'))
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: NetImage(
+                                        img.sn('imageUrl'),
+                                        width: 72,
+                                        height: 72,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-            ]);
+              ],
+            );
           },
         ),
       ],
@@ -118,16 +149,26 @@ class GrowthForm extends StatefulWidget {
   /// Nhận record server trả về (để chọn làm minh chứng).
   final void Function(J created)? onCreated;
 
-  const GrowthForm({super.key, required this.path, this.record, this.onCreated});
+  const GrowthForm({
+    super.key,
+    required this.path,
+    this.record,
+    this.onCreated,
+  });
 
   @override
   State<GrowthForm> createState() => _GrowthFormState();
 }
 
 class _GrowthFormState extends State<GrowthForm> {
-  late final _stage = TextEditingController(text: widget.record?.s('stage') ?? '');
-  late final _notes = TextEditingController(text: widget.record?.s('notes') ?? '');
-  late DateTime _at = parseIso(widget.record?.sn('recordedAt')) ?? DateTime.now();
+  late final _stage = TextEditingController(
+    text: widget.record?.s('stage') ?? '',
+  );
+  late final _notes = TextEditingController(
+    text: widget.record?.s('notes') ?? '',
+  );
+  late DateTime _at =
+      parseIso(widget.record?.sn('recordedAt')) ?? DateTime.now();
   final List<XFile> _files = [];
   final Map<String, Uint8List> _bytes = {};
   bool _busy = false;
@@ -148,10 +189,16 @@ class _GrowthFormState extends State<GrowthForm> {
       setState(() => _error = 'Tối đa 5 ảnh mới mỗi lần.');
       return;
     }
-    final picked = await ImagePicker().pickMultiImage(limit: room < 2 ? 2 : room, imageQuality: 92);
+    final picked = await ImagePicker().pickMultiImage(
+      limit: room < 2 ? 2 : room,
+      imageQuality: 92,
+    );
     if (picked.isEmpty) return;
     final all = [..._files, ...picked];
-    final err = await validateImages(all, max: 5); // chặn >5 ảnh/sai MIME/>5 MiB trước request
+    final err = await validateImages(
+      all,
+      max: 5,
+    ); // chặn >5 ảnh/sai MIME/>5 MiB trước request
     if (err != null) {
       setState(() => _error = err);
       return;
@@ -168,10 +215,26 @@ class _GrowthFormState extends State<GrowthForm> {
   }
 
   Future<void> _pickTime() async {
-    final d = await showDatePicker(context: context, initialDate: _at, firstDate: DateTime(2000), lastDate: DateTime(2100));
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _at,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
     if (d == null || !mounted) return;
-    final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_at));
-    setState(() => _at = DateTime(d.year, d.month, d.day, t?.hour ?? _at.hour, t?.minute ?? _at.minute));
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_at),
+    );
+    setState(
+      () => _at = DateTime(
+        d.year,
+        d.month,
+        d.day,
+        t?.hour ?? _at.hour,
+        t?.minute ?? _at.minute,
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -210,98 +273,207 @@ class _GrowthFormState extends State<GrowthForm> {
     final theme = Theme.of(context);
     final existing = widget.record?.l('images') ?? [];
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 8, 4),
-            child: Row(children: [
-              Expanded(child: Text(_edit ? 'Sửa nhật ký sinh trưởng' : 'Ghi sinh trưởng', style: theme.textTheme.titleLarge)),
-              IconButton(onPressed: _busy ? null : () => Navigator.pop(context, false), icon: const Icon(Icons.close_rounded)),
-            ]),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _edit ? 'Sửa nhật ký sinh trưởng' : 'Ghi sinh trưởng',
+                    style: theme.textTheme.titleLarge,
+                  ),
+                ),
+                IconButton(
+                  onPressed: _busy ? null : () => Navigator.pop(context, false),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
           ),
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                if (_error != null)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: AppColors.dangerSoft, borderRadius: BorderRadius.circular(14)),
-                    child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),
-                  ),
-                TextField(controller: _stage, decoration: const InputDecoration(labelText: 'Giai đoạn *', helperText: 'Chuỗi tự do, ví dụ: Ra quả thể')),
-                const SizedBox(height: 14),
-                TextField(controller: _notes, minLines: 3, maxLines: 6, decoration: const InputDecoration(labelText: 'Ghi chú *')),
-                const SizedBox(height: 14),
-                InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: _pickTime,
-                  child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'Thời điểm ghi nhận', suffixIcon: Icon(Icons.event_rounded)),
-                    child: Text(fmtDateTime(_at.toIso8601String())),
-                  ),
-                ),
-                if (existing.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Text('Ảnh đã lưu (chỉ xem, không bị thay thế)', style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  Wrap(spacing: 8, runSpacing: 8, children: [
-                    for (final img in existing) NetImage(img.sn('imageUrl'), width: 64, height: 64),
-                  ]),
-                ],
-                const SizedBox(height: 16),
-                Row(children: [
-                  Expanded(child: Text('Ảnh mới (${_files.length}/5)', style: theme.textTheme.titleSmall)),
-                  OutlinedButton.icon(
-                    onPressed: _busy ? null : _pickImages,
-                    icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
-                    label: const Text('Chọn ảnh'),
-                  ),
-                ]),
-                const SizedBox(height: 8),
-                // Gỡ ở đây chỉ bỏ ảnh MỚI chưa gửi, không xóa ảnh đã lưu trên server.
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  for (final f in _files)
-                    Stack(children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: _bytes[f.path] == null
-                            ? const SizedBox(width: 64, height: 64)
-                            : Image.memory(_bytes[f.path]!, width: 64, height: 64, fit: BoxFit.cover),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_error != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.dangerSoft,
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: GestureDetector(
-                          onTap: () => setState(() {
-                            _files.remove(f);
-                            _bytes.remove(f.path);
-                          }),
-                          child: const CircleAvatar(radius: 10, backgroundColor: Colors.black54, child: Icon(Icons.close, size: 12, color: Colors.white)),
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(
+                          color: AppColors.danger,
+                          fontSize: 13,
                         ),
                       ),
-                    ]),
-                ]),
-              ]),
+                    ),
+                  LayoutBuilder(
+                    builder: (context, constraints) => DropdownMenu<String>(
+                      controller: _stage,
+                      initialSelection: widget.record?.sn('stage'),
+                      width: constraints.maxWidth,
+                      enabled: !_busy,
+                      enableFilter: true,
+                      requestFocusOnTap: true,
+                      label: const Text('Giai đoạn *'),
+                      helperText: 'Chọn giai đoạn hoặc nhập nội dung khác',
+                      dropdownMenuEntries: const [
+                        DropdownMenuEntry(value: 'Chuẩn bị', label: 'Chuẩn bị'),
+                        DropdownMenuEntry(value: 'Ủ tơ', label: 'Ủ tơ'),
+                        DropdownMenuEntry(
+                          value: 'Ra quả thể',
+                          label: 'Ra quả thể',
+                        ),
+                        DropdownMenuEntry(
+                          value: 'Thu hoạch',
+                          label: 'Thu hoạch',
+                        ),
+                        DropdownMenuEntry(value: 'Kết thúc', label: 'Kết thúc'),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _notes,
+                    minLines: 3,
+                    maxLines: 6,
+                    decoration: const InputDecoration(labelText: 'Ghi chú *'),
+                  ),
+                  const SizedBox(height: 14),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: _pickTime,
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Thời điểm ghi nhận',
+                        suffixIcon: Icon(Icons.event_rounded),
+                      ),
+                      child: Text(fmtDateTime(_at.toIso8601String())),
+                    ),
+                  ),
+                  if (existing.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Ảnh đã lưu (chỉ xem, không bị thay thế)',
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final img in existing)
+                          NetImage(img.sn('imageUrl'), width: 64, height: 64),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Ảnh mới (${_files.length}/5)',
+                          style: theme.textTheme.titleSmall,
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _busy ? null : _pickImages,
+                        icon: const Icon(
+                          Icons.add_photo_alternate_outlined,
+                          size: 18,
+                        ),
+                        label: const Text('Chọn ảnh'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Gỡ ở đây chỉ bỏ ảnh MỚI chưa gửi, không xóa ảnh đã lưu trên server.
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final f in _files)
+                        Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: _bytes[f.path] == null
+                                  ? const SizedBox(width: 64, height: 64)
+                                  : Image.memory(
+                                      _bytes[f.path]!,
+                                      width: 64,
+                                      height: 64,
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
+                            Positioned(
+                              right: 0,
+                              top: 0,
+                              child: GestureDetector(
+                                onTap: () => setState(() {
+                                  _files.remove(f);
+                                  _bytes.remove(f.path);
+                                }),
+                                child: const CircleAvatar(
+                                  radius: 10,
+                                  backgroundColor: Colors.black54,
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 12,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
-            child: Row(children: [
-              Expanded(child: OutlinedButton(onPressed: _busy ? null : () => Navigator.pop(context, false), child: const Text('Hủy'))),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _busy ? null : _submit,
-                  child: _busy
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
-                      : const Text('Lưu'),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _busy
+                        ? null
+                        : () => Navigator.pop(context, false),
+                    child: const Text('Hủy'),
+                  ),
                 ),
-              ),
-            ]),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _busy ? null : _submit,
+                    child: _busy
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Lưu'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
