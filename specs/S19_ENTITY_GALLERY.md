@@ -1,12 +1,12 @@
 # S19 — Gallery cơ sở, giống nấm và lô
 
-**Vị trí:** bottom sheet chi tiết cơ sở/giống; tab **Ảnh** của lô. **Quyền:** mọi role nội bộ xem, manager/admin mutation. Đây không phải API anonymous.
+**Vị trí:** bottom sheet chi tiết cơ sở/giống; tab **Ảnh** của lô. **Quyền:** khách xem ảnh public, token hợp lệ xem tất cả ảnh và metadata; manager/admin mutation. API GET xác thực tùy chọn.
 
 ## 1. Component và dữ liệu
 
 Gallery dùng chung, list phân trang 10 ảnh/trang, thumbnail, caption, nhãn “Ảnh bìa”, xem/phóng to. Chỉ gọi khi mở chi tiết/tab; list cơ sở/giống/lô chỉ dùng coverImageUrl/imageCount từ response parent.
 
-ID parent/image là integer. GalleryImage có `id,imageUrl,originalName,mimeType,fileSize,caption,isCover,uploadedByUserId,createdAt,updatedAt` và FK parent tương ứng. GET sort **isCover giảm dần, createdAt tăng dần, ID tăng dần**.
+ID parent/image là integer. GalleryImage có `id,imageUrl,originalName,mimeType,fileSize,caption,isCover,isPublic,uploadedByUserId,createdAt` và FK parent tương ứng. GET sort **isCover giảm dần, createdAt tăng dần, ID tăng dần**.
 
 Rỗng có placeholder; ảnh lỗi có placeholder (không có nút tải lại riêng; mở lại màn hoặc làm mới để tải lại). Resolve URL với origin server; không nối /api vào /uploads. Giống dùng imageUrl cũ làm dự phòng theo response khi chưa có ảnh gallery. Ảnh legacy không tự trở thành GalleryImage có ID để sửa/xóa.
 
@@ -70,3 +70,9 @@ Sau mutation reload gallery page 1, GET parent detail và reload list parent đ�
 - [ ] Caption giới hạn, xóa gửi null, chọn bìa gửi true.
 - [ ] Xóa bìa có ảnh thay thế từ server; xóa cuối gallery rỗng, giống có thể dùng legacy fallback.
 - [ ] Gallery/detail/list đồng bộ; staff chỉ xem; ảnh growth và ảnh gallery lô độc lập.
+
+## Trạng thái công khai của ảnh
+
+Upload/sửa có công tắc Công khai; thẻ ảnh có nhãn Công khai/Riêng tư. Frontend mặc định public cho ảnh giống nấm, private cho ảnh cơ sở/lô. POST multipart isPublic=true/false áp dụng cho mọi ảnh trong lần tải; PATCH JSON isPublic: boolean đổi từng ảnh. Sau mutation reload gallery và cover/count của parent.
+
+GET không token chỉ trả id,imageUrl,caption,isCover của ảnh isPublic=true. Các field metadata vắng mặt không gây lỗi giao diện. GET với token hợp lệ trả đầy đủ ảnh/metadata. Từ điển dùng chế độ public kể cả khi đang có token. Ảnh private dùng fetch bytes với Authorization đúng origin, không gửi token qua redirect, bỏ provider khi đăng xuất/đổi server.

@@ -1,11 +1,16 @@
 class MushroomCatalogItem {
+  final int? id;
   final String name;
   final String scientificName;
   final bool isPoisonous;
   final String? edibilityStatus;
-  String get edibilityLabel => switch(edibilityStatus) {
-    'CHOICE' => 'Ăn ngon', 'EDIBLE' => 'Ăn được', 'INEDIBLE' => 'Không ăn được',
-    'POISONOUS' => 'Có độc', 'DEADLY' => 'Độc chết người', _ => isPoisonous ? 'Có độc' : 'Chưa xác định',
+  String get edibilityLabel => switch (edibilityStatus) {
+    'CHOICE' => 'Ăn ngon',
+    'EDIBLE' => 'Ăn được',
+    'INEDIBLE' => 'Không ăn được',
+    'POISONOUS' => 'Có độc',
+    'DEADLY' => 'Độc chết người',
+    _ => isPoisonous ? 'Có độc' : 'Chưa xác định',
   };
 
   /// Ảnh đại diện do backend trả về (tuỳ chọn). Có thể là URL đầy đủ
@@ -13,6 +18,7 @@ class MushroomCatalogItem {
   final String? imageUrl;
 
   const MushroomCatalogItem({
+    this.id,
     required this.name,
     required this.scientificName,
     required this.isPoisonous,
@@ -29,13 +35,34 @@ class MushroomCatalogItem {
       .replaceAll(RegExp(r'^_+|_+$'), '');
 
   factory MushroomCatalogItem.fromJson(Map<String, dynamic> json) {
-    final rawImage = (json['image_url'] ?? json['image'] ?? json['thumbnail'])
-        ?.toString()
-        .trim();
+    String? rawImage;
+    for (final value in [
+      json['coverImageUrl'],
+      json['imageUrl'],
+      json['image_url'],
+      json['image'],
+      json['thumbnail'],
+    ]) {
+      if (value is String && value.trim().isNotEmpty) {
+        rawImage = value.trim();
+        break;
+      }
+    }
+    final edibility = (json['edibilityStatus'] ?? json['edibility_status'])
+        ?.toString();
     return MushroomCatalogItem(
-      name: (json['name'] ?? '').toString(),
-      scientificName: (json['scientific_name'] ?? json['name'] ?? '').toString(),
-      isPoisonous: json['is_poisonous'] == true ||
+      id: (json['id'] as num?)?.toInt(),
+      name: (json['commonName'] ?? json['name'] ?? '').toString(),
+      scientificName:
+          (json['scientificName'] ??
+                  json['scientific_name'] ??
+                  json['name'] ??
+                  '')
+              .toString(),
+      edibilityStatus: edibility,
+      isPoisonous:
+          ['POISONOUS', 'DEADLY'].contains(edibility) ||
+          json['is_poisonous'] == true ||
           json['is_poisonous'] == 1 ||
           json['is_poisonous'].toString().toLowerCase() == 'true',
       imageUrl: (rawImage == null || rawImage.isEmpty) ? null : rawImage,
@@ -44,6 +71,8 @@ class MushroomCatalogItem {
 
   Map<String, dynamic> toJson() {
     return {
+      if (id != null) 'id': id,
+      if (edibilityStatus != null) 'edibility_status': edibilityStatus,
       'name': name,
       'scientific_name': scientificName,
       'is_poisonous': isPoisonous,
@@ -71,18 +100,26 @@ class MushroomCatalogResponse {
 
   factory MushroomCatalogResponse.fromJson(Map<String, dynamic> json) {
     final list = (json['mushrooms'] as List<dynamic>? ?? [])
-        .map((e) => MushroomCatalogItem.fromJson(Map<String, dynamic>.from(e as Map)))
+        .map(
+          (e) =>
+              MushroomCatalogItem.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
         .toList();
     final poisonousList = (json['poisonous_mushrooms'] as List<dynamic>? ?? [])
-        .map((e) => MushroomCatalogItem.fromJson(Map<String, dynamic>.from(e as Map)))
+        .map(
+          (e) =>
+              MushroomCatalogItem.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
         .toList();
 
     return MushroomCatalogResponse(
       source: (json['source'] ?? 'mushroom_dataset').toString(),
       total: (json['total'] as num?)?.toInt() ?? list.length,
-      poisonousCount: (json['poisonous_count'] as num?)?.toInt() ??
+      poisonousCount:
+          (json['poisonous_count'] as num?)?.toInt() ??
           list.where((m) => m.isPoisonous).length,
-      safeCount: (json['safe_count'] as num?)?.toInt() ??
+      safeCount:
+          (json['safe_count'] as num?)?.toInt() ??
           list.where((m) => !m.isPoisonous).length,
       mushrooms: list,
       poisonousMushrooms: poisonousList.isNotEmpty
@@ -212,4 +249,3 @@ final mockCatalogResponse = MushroomCatalogResponse(
     ),
   ],
 );
-

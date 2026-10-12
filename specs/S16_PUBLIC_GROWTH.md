@@ -6,7 +6,7 @@
 
 Ô mã lô, nút tra cứu/Enter (không có liên kết sang nhận diện). Mã trim, dài 1–191 ký tự, encode khi đưa vào path. Mở từ chi tiết lô thì mã được điền sẵn và tự tra lần đầu. Khi sửa input bỏ kết quả cũ, bỏ qua response của lượt tìm trước đến muộn.
 
-Ban đầu chưa tra khác với không thấy lô (404), lỗi mạng và lô chưa có nhật ký (currentProgress null). Kết quả hiện mã/trạng thái/ngày, tên giống, tên cơ sở/tỉnh, stage/notes/thời điểm hiện tại và ảnh xem/phóng to. App không có QR scanner hoặc nút chia sẻ riêng ở màn này.
+Ban đầu chưa tra khác với không thấy lô (404), lỗi mạng và lô chưa có nhật ký (currentProgress null). Kết quả hiện mã/trạng thái/ngày, tên giống, tên cơ sở/tỉnh, stage/notes/thời điểm hiện tại và ảnh xem/phóng to. Màn này có nút Quét QR: đọc batchCode, điền ô nhập và tra cứu bằng API public. Hủy quét giữ nội dung đang nhập; camera lỗi vẫn nhập mã thủ công. QR được hiển thị/lưu PNG tại chi tiết lô.
 
 ## API call
 

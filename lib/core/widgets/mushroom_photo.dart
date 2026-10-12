@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'mushroom_glyph.dart';
+import '../network/api_config.dart';
 
 /// Ảnh đại diện cho một loài nấm. Thứ tự ưu tiên:
 ///   1. [imageUrl] từ backend (URL đầy đủ hoặc đường dẫn tương đối)
@@ -32,16 +33,17 @@ class MushroomPhoto extends StatelessWidget {
     final u = imageUrl;
     if (u == null || u.isEmpty) return null;
     if (u.startsWith('http://') || u.startsWith('https://')) return u;
-    final b = baseUrl;
-    if (b == null || b.isEmpty) return null;
-    final base = b.endsWith('/') ? b.substring(0, b.length - 1) : b;
-    return u.startsWith('/') ? '$base$u' : '$base/$u';
+    if (baseUrl == null || baseUrl!.isEmpty) return ApiConfig.media(u);
+    return ApiConfig.fromInput(baseUrl!).mediaUrl(u).toString();
   }
 
   Widget _glyph() => Center(
-        child: MushroomGlyph.forSpecies(name,
-            poisonous: poisonous, size: glyphSize),
-      );
+    child: MushroomGlyph.forSpecies(
+      name,
+      poisonous: poisonous,
+      size: glyphSize,
+    ),
+  );
 
   Widget _asset() {
     if (assetKey.isEmpty) return _glyph();

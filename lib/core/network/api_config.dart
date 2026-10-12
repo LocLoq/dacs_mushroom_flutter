@@ -1,21 +1,29 @@
 import '../../app/config/app_constants.dart';
+import 'package:flutter/foundation.dart';
 import '../services/app_preferences_service.dart';
 import '../services/backend_queue_service.dart';
 
 class ApiConfig {
+  static final changes = ValueNotifier<int>(0);
   static String _current = AppConstants.kDefaultBackendBaseUrl;
-  static void useServer(String value) { _current=ApiConfig.fromInput(value).serverOrigin.toString(); }
+  static void useServer(String value) {
+    _current = ApiConfig.fromInput(value).serverOrigin.toString();
+    changes.value++;
+  }
+
   static String get baseUrl =>
       ApiConfig.fromInput(_current).apiBaseUri.toString();
   static String get origin =>
       ApiConfig.fromInput(_current).serverOrigin.toString();
   static Future<void> load() async {
     _current = (await AppPreferencesService.instance.load()).backendBaseUrl;
+    changes.value++;
   }
 
   static Future<void> save(String value) async {
     await AppPreferencesService.instance.saveBackendBaseUrl(value);
     _current = ApiConfig.fromInput(value).serverOrigin.toString();
+    changes.value++;
     BackendQueueService.instance.updateBackendBaseUrl(_current);
     await BackendQueueService.instance.reconnect(_current);
   }
@@ -51,9 +59,9 @@ class ApiConfig {
       ),
     );
   }
-  Uri endpoint(String path, [Map<String, dynamic>? query]) =>
-      serverOrigin.replace(
-        path: '/api/${path.replaceFirst(RegExp(r'^/+'), '')}',
+  Uri endpoint(String path, [Map<String, dynamic>? query]) => serverOrigin
+      .resolve('/api/${path.replaceFirst(RegExp(r'^/+'), '')}')
+      .replace(
         queryParameters: query == null
             ? null
             : {

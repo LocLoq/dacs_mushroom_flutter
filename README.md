@@ -23,7 +23,7 @@ Mở **Cài đặt → Dùng dữ liệu mẫu**. App mới cài mặc định d
 
 Tài khoản mẫu: admin/admin123, manager/manager123, staff/staff123. Các màn quản lý dùng dữ liệu trong bộ nhớ; thay đổi mẫu không gửi lên backend và không được giữ sau khi khởi động lại. Kết quả nhận diện trong chế độ mẫu ghi rõ là minh họa, ảnh chưa được AI phân tích.
 
-Danh mục thật nằm ở API bảo vệ /mushroom-species, nên cần đăng nhập khi dùng backend thật. Chế độ mẫu cho phép xem danh mục offline.
+Từ điển và chi tiết giống nấm dùng API công khai /mushroom-species, không cần đăng nhập và không gửi token. Ảnh lấy từ coverImageUrl/imageUrl trên backend, dự phòng ảnh đóng gói. Chế độ mẫu cũng hỗ trợ danh mục và gallery công khai.
 
 ## Kiểm thử
 
@@ -40,4 +40,35 @@ flutter build apk --debug --no-pub
 
 Script kiểm thử dùng ánh xạ ổ đĩa tạm để tránh lỗi Flutter khi đường dẫn Windows có dấu nháy đơn. Test live dùng tài khoản admin demo, dọn bản ghi quản lý tạm sau khi chạy; lượt nhận diện thử và audit được backend lưu theo hành vi bình thường.
 
-Có thể chạy test/api_live_test.dart với --dart-define=LIVE_API_TEST=true cùng LIVE_API_URL, LIVE_API_USERNAME, LIVE_API_PASSWORD để dùng máy chủ/tài khoản khác. Các thay đổi tích hợp chỉ ở repository Flutter; không sửa mã hoặc cấu hình backend.
+Có thể chạy test/api_live_test.dart với --dart-define=LIVE_API_TEST=true cùng LIVE_API_URL, LIVE_API_USERNAME, LIVE_API_PASSWORD để dùng máy chủ/tài khoản khác. Backend cần có API /cultivation-batches/by-code/{batchCode} và gallery isPublic theo hợp đồng hiện tại.
+
+## Gallery và QR lô
+
+Admin/manager có thể chọn Công khai khi tải/sửa ảnh. Upload giống nấm bật sẵn public, cơ sở/lô tắt sẵn. Khách chỉ xem ảnh public; ảnh private được tải bằng Bearer token đúng server và bỏ khỏi màn hình khi đăng xuất/đổi server.
+
+Chi tiết lô có Mã QR và Lưu PNG. QR chứa mã lô, không phải ID/token/URL. Tra cứu tiến trình lô có nút Quét QR không cần đăng nhập. Quản lý và danh sách lô có Quét lô để cập nhật, resolve ID bằng API by-code rồi chọn Sinh trưởng/Chăm sóc/Thu hoạch. Quét chỉ mở form; người dùng kiểm tra và tự lưu.
+
+Camera hỗ trợ Android/iOS/Web. Web cần HTTPS hoặc localhost, cấp quyền camera; desktop và khi camera lỗi vẫn nhập mã thủ công. Thư viện lưu PNG dùng file_saver 0.4.0 tương thích Dart 3.11.4 của dự án.
+
+Các lệnh sau tự ánh xạ ổ đĩa tạm để tránh dấu nháy đơn trong đường dẫn Windows:
+
+~~~powershell
+.\tool\check_frontend.ps1 -Task analyze
+.\tool\check_frontend.ps1 -Task test
+.\tool\check_frontend.ps1 -Task android
+.\tool\check_frontend.ps1 -Task web
+~~~
+
+APK debug: build/app/outputs/flutter-apk/app-debug.apk. Web: build/web. iOS build và kiểm tra camera iOS cần máy macOS/iPhone.
+
+
+## Android native camera test
+
+Run on a local Android test device after granting com.example.thu camera permission:
+
+~~~powershell
+adb -s emulator-5554 shell pm grant com.example.thu android.permission.CAMERA
+.\tool\check_frontend.ps1 -Task camera -Device emulator-5554
+~~~
+
+This test starts the native camera and decodes the actual PNG exported by the QR dialog, including Unicode and URL-special characters. It does not call business APIs. The integration test replaces the debug APK entrypoint; rebuild/install the normal debug APK with check_frontend.ps1 -Task android afterward.

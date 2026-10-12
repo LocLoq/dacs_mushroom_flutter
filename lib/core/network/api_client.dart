@@ -12,7 +12,7 @@ import '../storage/local_session.dart';
 import 'api_config.dart';
 import 'api_exception.dart';
 import 'mock_config.dart';
-import 'mock_seed.dart';
+import 'mock_backend.dart';
 export 'api_config.dart';
 export 'api_exception.dart';
 
@@ -207,15 +207,24 @@ class ApiClient {
     String path, {
     Map<String, dynamic>? query,
     String? baseUrl,
+    RequestAuth auth = RequestAuth.required,
   }) async {
     final rows = <Map<String, dynamic>>[];
     var page = 1;
     while (true) {
-      final response = await request(
-        path,
-        query: {...?query, 'page': page, 'limit': 50},
-        baseUrl: baseUrl,
-      );
+      final response = MockConfig.enabled && path == '/mushroom-species'
+          ? await MockBackend.instance.handle(
+              'GET',
+              path,
+              query: {...?query, 'page': page, 'limit': 50},
+              public: auth == RequestAuth.none,
+            )
+          : await request(
+              path,
+              query: {...?query, 'page': page, 'limit': 50},
+              baseUrl: baseUrl,
+              auth: auth,
+            );
       rows.addAll(
         (response['data'] as List).map(
           (row) => Map<String, dynamic>.from(row as Map),
@@ -277,28 +286,20 @@ class ApiClient {
   Future<MushroomCatalogResponse> fetchMushroomCatalog([
     String? baseUrl,
   ]) async {
-    final rows = MockConfig.enabled
-        ? MockSeed.species()
-        : await fetchRawList('/mushroom-species', baseUrl: baseUrl);
-    final items = rows
-        .map(
-          (row) => MushroomCatalogItem(
-            edibilityStatus: row['edibilityStatus'] as String?,
-            name: row['commonName'] as String,
-            scientificName: row['scientificName'] as String,
-            isPoisonous: [
-              'POISONOUS',
-              'DEADLY',
-            ].contains(row['edibilityStatus']),
-          ),
-        )
-        .toList();
+    final rows = await fetchRawList(
+      '/mushroom-species',
+      baseUrl: baseUrl,
+      auth: RequestAuth.none,
+    );
+    final items = rows.map(MushroomCatalogItem.fromJson).toList();
     final poisonous = items.where((item) => item.isPoisonous).toList();
     return MushroomCatalogResponse(
       source: 'mushroom-species',
       total: items.length,
       poisonousCount: poisonous.length,
-      safeCount: items.where((item)=>['CHOICE','EDIBLE'].contains(item.edibilityStatus)).length,
+      safeCount: items
+          .where((item) => ['CHOICE', 'EDIBLE'].contains(item.edibilityStatus))
+          .length,
       mushrooms: items,
       poisonousMushrooms: poisonous,
     );

@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSCameraUsageDescription</key>
+    <string>Quét mã QR để tra cứu và cập nhật lô nuôi trồng.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Chọn ảnh để nhận diện nấm và cập nhật thư viện ảnh.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

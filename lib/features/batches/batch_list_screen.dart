@@ -11,6 +11,7 @@ import '../../core/widgets/soft_card.dart';
 import '../../core/widgets/status_chip.dart';
 import '../facilities/facility_list_screen.dart';
 import 'batch_detail_screen.dart';
+import '../batch_qr/batch_qr_actions.dart';
 
 /// Danh sách và tạo lô (specs/S03_BATCH_LIST.md).
 class BatchListScreen extends StatefulWidget {
@@ -25,19 +26,66 @@ class BatchListScreen extends StatefulWidget {
 
 /// Form dùng chung tạo/sửa lô.
 List<FieldDef> batchFields() => [
-      const FieldDef('batchCode', 'Mã lô', FieldType.text, required: true, maxLen: 191),
-      FieldDef('facilityId', 'Cơ sở', FieldType.pickOne, required: true, picker: facilityPicker()),
-      FieldDef('mushroomId', 'Giống nấm', FieldType.pickOne, required: true, picker: speciesPicker()),
-      const FieldDef('status', 'Trạng thái', FieldType.choice, required: true, options: batchStatusLabels),
-      const FieldDef('startDate', 'Ngày bắt đầu', FieldType.date, required: true),
-      const FieldDef('expectedHarvestDate', 'Dự kiến thu hoạch', FieldType.date, nullable: true),
-      const FieldDef('endDate', 'Ngày kết thúc', FieldType.date, nullable: true),
-      const FieldDef('substrateType', 'Loại giá thể', FieldType.text, nullable: true),
-      const FieldDef('spawnSource', 'Nguồn giống', FieldType.text, nullable: true),
-      const FieldDef('bagQuantity', 'Số bịch', FieldType.integer, nullable: true, min: 0),
-      const FieldDef('defectRate', 'Tỷ lệ lỗi (%)', FieldType.number, nullable: true, min: 0, max: 100),
-      const FieldDef('notes', 'Ghi chú', FieldType.multiline, nullable: true),
-    ];
+  const FieldDef(
+    'batchCode',
+    'Mã lô',
+    FieldType.text,
+    required: true,
+    maxLen: 191,
+  ),
+  FieldDef(
+    'facilityId',
+    'Cơ sở',
+    FieldType.pickOne,
+    required: true,
+    picker: facilityPicker(),
+  ),
+  FieldDef(
+    'mushroomId',
+    'Giống nấm',
+    FieldType.pickOne,
+    required: true,
+    picker: speciesPicker(),
+  ),
+  const FieldDef(
+    'status',
+    'Trạng thái',
+    FieldType.choice,
+    required: true,
+    options: batchStatusLabels,
+  ),
+  const FieldDef('startDate', 'Ngày bắt đầu', FieldType.date, required: true),
+  const FieldDef(
+    'expectedHarvestDate',
+    'Dự kiến thu hoạch',
+    FieldType.date,
+    nullable: true,
+  ),
+  const FieldDef('endDate', 'Ngày kết thúc', FieldType.date, nullable: true),
+  const FieldDef(
+    'substrateType',
+    'Loại giá thể',
+    FieldType.text,
+    nullable: true,
+  ),
+  const FieldDef('spawnSource', 'Nguồn giống', FieldType.text, nullable: true),
+  const FieldDef(
+    'bagQuantity',
+    'Số bịch',
+    FieldType.integer,
+    nullable: true,
+    min: 0,
+  ),
+  const FieldDef(
+    'defectRate',
+    'Tỷ lệ lỗi (%)',
+    FieldType.number,
+    nullable: true,
+    min: 0,
+    max: 100,
+  ),
+  const FieldDef('notes', 'Ghi chú', FieldType.multiline, nullable: true),
+];
 
 class _BatchListScreenState extends State<BatchListScreen> {
   final _api = FarmApi.instance;
@@ -82,10 +130,23 @@ class _BatchListScreenState extends State<BatchListScreen> {
     final canManage = LocalSession.canManage;
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Lô nuôi trồng')),
+      appBar: AppBar(
+        title: const Text('Lô nuôi trồng'),
+        actions: [
+          if (LocalSession.isLoggedIn)
+            IconButton(
+              tooltip: 'Quét lô để cập nhật',
+              onPressed: () => scanBatchForUpdate(context),
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+            ),
+        ],
+      ),
       floatingActionButton: canManage
           ? FloatingActionButton.extended(
-              onPressed: _create, icon: const Icon(Icons.add_rounded), label: const Text('Tạo lô'))
+              onPressed: _create,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Tạo lô'),
+            )
           : null,
       body: PagedListView(
         key: _key,
@@ -99,71 +160,114 @@ class _BatchListScreenState extends State<BatchListScreen> {
             children: [
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                child: Row(children: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(label: const Text('Tất cả'), selected: _status == null, onSelected: (_) => setState(() => _status = null)),
-                  ),
-                  for (final e in batchStatusLabels.entries)
+                child: Row(
+                  children: [
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: ChoiceChip(
-                        label: Text(e.value),
-                        selected: _status == e.key,
-                        onSelected: (_) => setState(() => _status = e.key),
+                        label: const Text('Tất cả'),
+                        selected: _status == null,
+                        onSelected: (_) => setState(() => _status = null),
                       ),
                     ),
-                ]),
+                    for (final e in batchStatusLabels.entries)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(e.value),
+                          selected: _status == e.key,
+                          onSelected: (_) => setState(() => _status = e.key),
+                        ),
+                      ),
+                  ],
+                ),
               ),
               const SizedBox(height: 6),
-              Wrap(spacing: 8, children: [
-                ActionChip(
-                  avatar: const Icon(Icons.factory_rounded, size: 16),
-                  label: Text(_facility == null ? 'Cơ sở: tất cả' : _facility!.s('label')),
-                  onPressed: () => _pick(facilityPicker(), true),
-                ),
-                ActionChip(
-                  avatar: const Icon(Icons.spa_rounded, size: 16),
-                  label: Text(_species == null ? 'Giống: tất cả' : _species!.s('label')),
-                  onPressed: () => _pick(speciesPicker(), false),
-                ),
-              ]),
+              Wrap(
+                spacing: 8,
+                children: [
+                  ActionChip(
+                    avatar: const Icon(Icons.factory_rounded, size: 16),
+                    label: Text(
+                      _facility == null
+                          ? 'Cơ sở: tất cả'
+                          : _facility!.s('label'),
+                    ),
+                    onPressed: () => _pick(facilityPicker(), true),
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.spa_rounded, size: 16),
+                    label: Text(
+                      _species == null ? 'Giống: tất cả' : _species!.s('label'),
+                    ),
+                    onPressed: () => _pick(speciesPicker(), false),
+                  ),
+                ],
+              ),
               Text('', style: theme.textTheme.bodySmall),
             ],
           ),
         ),
-        fetch: (p, s) async => PageData.from(await _api.get('/cultivation-batches', query: {
-          'page': p,
-          'limit': 10,
-          'search': s,
-          'status': _status,
-          'facilityId': _facility?['id'],
-          'mushroomId': _species?['id'],
-        })),
+        fetch: (p, s) async => PageData.from(
+          await _api.get(
+            '/cultivation-batches',
+            query: {
+              'page': p,
+              'limit': 10,
+              'search': s,
+              'status': _status,
+              'facilityId': _facility?['id'],
+              'mushroomId': _species?['id'],
+            },
+          ),
+        ),
         itemBuilder: (ctx, b, reload) {
           final st = b.sn('status');
           return SoftCard(
             padding: const EdgeInsets.all(12),
             onTap: () async {
-              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => BatchDetailScreen(batchId: b.i('id')!)));
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => BatchDetailScreen(batchId: b.i('id')!),
+                ),
+              );
               reload();
             },
             child: Row(
               children: [
-                NetImage(b.sn('coverImageUrl'), width: 64, height: 64, zoomable: false),
+                NetImage(
+                  b.sn('coverImageUrl'),
+                  width: 64,
+                  height: 64,
+                  zoomable: false,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(b.s('batchCode'), style: theme.textTheme.titleSmall),
-                      Text('${b.m('mushroom')?.s('commonName') ?? '—'} · ${b.m('facility')?.s('name') ?? '—'}',
-                          style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(
+                        '${b.m('mushroom')?.s('commonName') ?? '—'} · ${b.m('facility')?.s('name') ?? '—'}',
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       const SizedBox(height: 6),
-                      Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                        StatusChip(text: label(batchStatusLabels, st), color: statusColor(st)),
-                        Text('${fmtDate(b.sn('startDate'))} · ${b.i('imageCount') ?? 0} ảnh', style: theme.textTheme.bodySmall),
-                      ]),
+                      Wrap(
+                        spacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          StatusChip(
+                            text: label(batchStatusLabels, st),
+                            color: statusColor(st),
+                          ),
+                          Text(
+                            '${fmtDate(b.sn('startDate'))} · ${b.i('imageCount') ?? 0} ảnh',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -190,27 +294,60 @@ class _SinglePick extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 8, 4),
-            child: Row(children: [
-              Expanded(child: Text(source.title, style: Theme.of(context).textTheme.titleLarge)),
-              TextButton(onPressed: () => Navigator.pop(context, <J>[]), child: const Text('Bỏ lọc')),
-              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
-            ]),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    source.title,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, <J>[]),
+                  child: const Text('Bỏ lọc'),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: PagedListView(
               searchHint: 'Tìm kiếm',
               fetch: source.fetch,
               itemBuilder: (ctx, item, _) => SoftCard(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                onTap: () => Navigator.pop(context, [<String, dynamic>{'id': item['id'], 'label': source.label(item)}]),
-                child: Row(children: [
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(source.label(item), style: Theme.of(ctx).textTheme.titleSmall),
-                      if (source.subtitle != null) Text(source.subtitle!(item), style: Theme.of(ctx).textTheme.bodySmall),
-                    ]),
-                  ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                onTap: () => Navigator.pop(context, [
+                  <String, dynamic>{
+                    'id': item['id'],
+                    'label': source.label(item),
+                  },
                 ]),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            source.label(item),
+                            style: Theme.of(ctx).textTheme.titleSmall,
+                          ),
+                          if (source.subtitle != null)
+                            Text(
+                              source.subtitle!(item),
+                              style: Theme.of(ctx).textTheme.bodySmall,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

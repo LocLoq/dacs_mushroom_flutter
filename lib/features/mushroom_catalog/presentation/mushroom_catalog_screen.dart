@@ -4,22 +4,21 @@ import '../../../app/theme/app_colors.dart';
 import '../../../core/localization/app_text_scope.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/services/backend_queue_service.dart';
-import '../../../core/storage/local_session.dart';
-import '../../../core/network/mock_config.dart';
-import '../../auth/presentation/login_screen.dart';
+import 'public_species_detail_screen.dart';
 import '../../../core/widgets/mushroom_glyph.dart';
 import '../../../core/widgets/mushroom_photo.dart';
 import '../data/catalog_model.dart';
 
 class MushroomCatalogScreen extends StatefulWidget {
-  const MushroomCatalogScreen({super.key});
+  const MushroomCatalogScreen({super.key, this.api});
+  final ApiClient? api;
 
   @override
   State<MushroomCatalogScreen> createState() => _MushroomCatalogScreenState();
 }
 
 class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
-  final _api = ApiClient();
+  late final _api = widget.api ?? ApiClient();
   final _searchCtrl = TextEditingController();
 
   MushroomCatalogResponse? _catalog;
@@ -40,11 +39,18 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
   }
 
   Future<void> _loadCatalog() async {
-    setState(() { _loading=true; _error=null; });
-    if (!LocalSession.isLoggedIn && !MockConfig.enabled) { setState(() { _loading=false; _error='Đăng nhập để xem danh mục giống nấm trên máy chủ.'; }); return; }
-    try { final result=await _api.fetchMushroomCatalog(); if(mounted) setState(() => _catalog=result); }
-    catch(error) { if(mounted) setState(() => _error=error.toString()); }
-    finally { if(mounted) setState(() => _loading=false); }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final result = await _api.fetchMushroomCatalog();
+      if (mounted) setState(() => _catalog = result);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   List<MushroomCatalogItem> get _filteredList {
@@ -52,13 +58,16 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
     final query = _searchCtrl.text.toLowerCase().trim();
 
     return _catalog!.mushrooms.where((m) {
-      final matchQuery = query.isEmpty ||
+      final matchQuery =
+          query.isEmpty ||
           m.name.toLowerCase().contains(query) ||
           m.scientificName.toLowerCase().contains(query);
 
-      final matchFilter = _filterType == null ||
+      final matchFilter =
+          _filterType == null ||
           _filterType == 'all' ||
-          (_filterType == 'safe' && ['CHOICE','EDIBLE'].contains(m.edibilityStatus)) ||
+          (_filterType == 'safe' &&
+              ['CHOICE', 'EDIBLE'].contains(m.edibilityStatus)) ||
           (_filterType == 'poisonous' && m.isPoisonous);
 
       return matchQuery && matchFilter;
@@ -82,6 +91,14 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
   }
 
   void _showMushroomDetail(MushroomCatalogItem item) {
+    if (item.id != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PublicSpeciesDetailScreen(speciesId: item.id!),
+        ),
+      );
+      return;
+    }
     final theme = Theme.of(context);
     final poison = item.isPoisonous;
     final tone = _tone(context, poison);
@@ -160,12 +177,16 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
                           Expanded(
                             child: Text(
                               poison
-                                  ? tr(context,
+                                  ? tr(
+                                      context,
                                       vi: 'Loài nấm có độc tố nguy hiểm',
-                                      en: 'Dangerous poisonous species')
-                                  : tr(context,
+                                      en: 'Dangerous poisonous species',
+                                    )
+                                  : tr(
+                                      context,
                                       vi: 'Thông tin phân loại theo danh mục',
-                                      en: 'Safe / edible species'),
+                                      en: 'Safe / edible species',
+                                    ),
                               style: TextStyle(
                                 color: tone,
                                 fontWeight: FontWeight.w800,
@@ -228,13 +249,28 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) return SafeArea(child:Center(child:Column(mainAxisSize:MainAxisSize.min,children:[
-      Padding(padding:const EdgeInsets.all(24),child:Text(_error!,textAlign:TextAlign.center)),
-      FilledButton(onPressed:() async {
-        if(!LocalSession.isLoggedIn) { await Navigator.push(context,MaterialPageRoute(builder:(_) => const LoginScreen())); }
-        if(mounted) await _loadCatalog();
-      },child:Text(LocalSession.isLoggedIn ? 'Thử lại' : 'Đăng nhập')),
-    ])));
+    if (_error != null)
+      return SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(_error!, textAlign: TextAlign.center),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  if (mounted) {
+                    await _loadCatalog();
+                  }
+                },
+                child: const Text('Thử lại'),
+              ),
+            ],
+          ),
+        ),
+      );
     final theme = Theme.of(context);
     final list = _filteredList;
     final c = _catalog;
@@ -259,8 +295,11 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    tr(context,
-                                        vi: 'Từ điển nấm', en: 'Mushroom catalog'),
+                                    tr(
+                                      context,
+                                      vi: 'Từ điển nấm',
+                                      en: 'Mushroom catalog',
+                                    ),
                                     style: theme.textTheme.headlineMedium,
                                   ),
                                   if (c != null) ...[
@@ -278,7 +317,11 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
                               ),
                             ),
                             IconButton(
-                              tooltip: tr(context, vi: 'Làm mới', en: 'Refresh'),
+                              tooltip: tr(
+                                context,
+                                vi: 'Làm mới',
+                                en: 'Refresh',
+                              ),
                               onPressed: _loadCatalog,
                               icon: const Icon(Icons.refresh_rounded),
                             ),
@@ -296,7 +339,10 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
                             prefixIcon: const Icon(Icons.search_rounded),
                             suffixIcon: _searchCtrl.text.isNotEmpty
                                 ? IconButton(
-                                    icon: const Icon(Icons.close_rounded, size: 18),
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      size: 18,
+                                    ),
                                     onPressed: () {
                                       _searchCtrl.clear();
                                       setState(() {});
@@ -363,23 +409,20 @@ class _MushroomCatalogScreenState extends State<MushroomCatalogScreen> {
                       sliver: SliverGrid(
                         gridDelegate:
                             const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 230,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 0.8,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, i) {
-                            final m = list[i];
-                            return _SpeciesCard(
-                              item: m,
-                              tone: _tone(context, m.isPoisonous),
-                              toneSoft: _toneSoft(context, m.isPoisonous),
-                              onTap: () => _showMushroomDetail(m),
-                            );
-                          },
-                          childCount: list.length,
-                        ),
+                              maxCrossAxisExtent: 230,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                              childAspectRatio: 0.8,
+                            ),
+                        delegate: SliverChildBuilderDelegate((context, i) {
+                          final m = list[i];
+                          return _SpeciesCard(
+                            item: m,
+                            tone: _tone(context, m.isPoisonous),
+                            toneSoft: _toneSoft(context, m.isPoisonous),
+                            onTap: () => _showMushroomDetail(m),
+                          );
+                        }, childCount: list.length),
                       ),
                     ),
                 ],
@@ -451,7 +494,9 @@ class _SpeciesCard extends StatelessWidget {
                         left: 10,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 9, vertical: 4),
+                            horizontal: 9,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: tone,
                             borderRadius: BorderRadius.circular(20),
@@ -501,15 +546,18 @@ class _SpeciesCard extends StatelessWidget {
                         item.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(height: 1.25),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          height: 1.25,
+                        ),
                       ),
                       const SizedBox(height: 3),
                       Text(
                         item.scientificName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(fontStyle: FontStyle.italic),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontStyle: FontStyle.italic,
+                        ),
                       ),
                     ],
                   ),

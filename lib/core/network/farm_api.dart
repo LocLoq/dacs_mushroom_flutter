@@ -44,13 +44,19 @@ class FarmApi {
     String path, {
     Map<String, dynamic>? query,
     bool public = false,
+    RequestAuth? auth,
   }) => MockConfig.enabled
-      ? MockBackend.instance.handle('GET', path, query: query, public: public)
+      ? MockBackend.instance.handle(
+          'GET',
+          path,
+          query: query,
+          public: (auth == RequestAuth.none) || public,
+        )
       : _wrap(
           _api.request(
             path,
             query: query,
-            auth: public ? RequestAuth.none : RequestAuth.required,
+            auth: auth ?? (public ? RequestAuth.none : RequestAuth.required),
           ),
         );
   Future<J> post(String path, [Object? body]) => MockConfig.enabled

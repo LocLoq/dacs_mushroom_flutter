@@ -1,6 +1,6 @@
 # S08 — Giống nấm
 
-**Vị trí:** Quản lý → Giống nấm. **Quyền:** mọi role nội bộ xem; manager/admin tạo/sửa/xóa.
+**Vị trí:** Quản lý → Giống nấm và Từ điển. **Quyền:** khách xem danh mục/chi tiết/gallery public; người đăng nhập xem gallery đầy đủ; manager/admin tạo/sửa/xóa. Từ điển luôn bỏ Authorization.
 
 ## Giao diện và luồng
 
