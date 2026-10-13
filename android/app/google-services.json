@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "521176258793",
+    "project_id": "yesking-11e7d",
+    "storage_bucket": "yesking-11e7d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:521176258793:android:1e8e4e9a796011b4d17878",
+        "android_client_info": {
+          "package_name": "com.loql.layla.themushroomapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB-OpduyVy3gU9lVywqwytYTwZ0xgnsfEI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

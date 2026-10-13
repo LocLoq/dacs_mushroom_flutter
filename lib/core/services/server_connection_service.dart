@@ -14,7 +14,8 @@ enum PushHostMode {
   static PushHostMode infer(String url) {
     final uri = Uri.tryParse(url);
     if (uri?.host.endsWith('.devtunnels.ms') == true) return tunnel;
-    if (uri != null && uri.host.isNotEmpty && isPrivateHost(uri.host)) return lan;
+    if (uri != null && uri.host.isNotEmpty && isPrivateHost(uri.host))
+      return lan;
     return vps;
   }
 }
@@ -23,7 +24,9 @@ bool isPrivateHost(String host) {
   host = host.toLowerCase();
   if (host == 'localhost' ||
       host == '::1' ||
-      host.endsWith('.local') || host.endsWith('.lan') || host.endsWith('.home.arpa') ||
+      host.endsWith('.local') ||
+      host.endsWith('.lan') ||
+      host.endsWith('.home.arpa') ||
       (!host.contains('.') && !host.contains(':')))
     return true;
   final parts = host.split('.').map(int.tryParse).toList();
@@ -103,4 +106,12 @@ Future<void> checkServerConnection(String origin) async {
   } finally {
     socket.dispose();
   }
+}
+
+String normalizePushServerAddress(String input) {
+  if (input.trim().isEmpty)
+    throw const FormatException("Vui lòng nhập IP hoặc URL backend.");
+  final candidate = ApiConfig.fromInput(input);
+  final mode = PushHostMode.infer(candidate.serverOrigin.toString());
+  return validateServerUrl(input, mode);
 }

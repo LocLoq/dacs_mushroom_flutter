@@ -48,3 +48,14 @@ analyze-push-final.txt
 test-push-final.txt
 pub-push-final.txt
 build-push-final.txt
+
+analyze-firebase.txt
+test-firebase.txt
+build-firebase.txt
+
+pub-firebase.txt
+
+pub-address.txt
+analyze-address.txt
+test-address.txt
+build-address.txt

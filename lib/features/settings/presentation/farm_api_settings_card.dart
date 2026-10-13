@@ -20,6 +20,7 @@ class _FarmApiSettingsCardState extends State<FarmApiSettingsCard> {
   @override
   void initState() {
     super.initState();
+    ApiConfig.changes.addListener(_serverChanged);
     () async {
       final mode = await AppPreferencesService.instance.hostMode();
       final url = await AppPreferencesService.instance.urlForMode(mode);
@@ -41,10 +42,22 @@ class _FarmApiSettingsCardState extends State<FarmApiSettingsCard> {
       });
   }
 
+  final _urlFocus = FocusNode();
+  bool _dirty = false;
+  void _serverChanged() {
+    if (!mounted || _busy || _dirty || _urlFocus.hasFocus) return;
+    setState(() {
+      _ctrl.text = ApiConfig.baseUrl;
+      _mode = PushHostMode.infer(ApiConfig.origin);
+    });
+  }
+
   bool _busy = false, _ok = false;
   String? _message;
   @override
   void dispose() {
+    ApiConfig.changes.removeListener(_serverChanged);
+    _urlFocus.dispose();
     _ctrl.dispose();
     super.dispose();
   }
@@ -62,6 +75,7 @@ class _FarmApiSettingsCardState extends State<FarmApiSettingsCard> {
       if (mounted)
         setState(() {
           _ok = true;
+          _dirty = false;
           _ctrl.text = ApiConfig.baseUrl;
           _message = check
               ? 'Kết nối máy chủ thành công.'
@@ -137,6 +151,8 @@ class _FarmApiSettingsCardState extends State<FarmApiSettingsCard> {
             const SizedBox(height: 12),
             TextField(
               controller: _ctrl,
+              focusNode: _urlFocus,
+              onChanged: (_) => _dirty = true,
               keyboardType: TextInputType.url,
               decoration: const InputDecoration(
                 labelText: 'Địa chỉ API',

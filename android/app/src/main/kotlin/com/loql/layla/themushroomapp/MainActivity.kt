@@ -1,4 +1,4 @@
-package com.example.thu
+package com.loql.layla.themushroomapp
 
 import io.flutter.embedding.android.FlutterActivity
 

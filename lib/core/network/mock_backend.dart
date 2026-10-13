@@ -739,23 +739,23 @@ class MockBackend {
         'data': {
           'mode': 'vps',
           'version': 'mock-v1',
-          'ntfyUrl': null,
-          'vapidPublicKey': null,
-          'channels': {'unifiedpush': false, 'apns': false},
+          'provider': 'fcm',
+          'projectId': null,
+          'channels': {'fcm': false},
         },
       };
     if (s.length > 1 && s[1] == 'devices') {
       final token = b['token'] as String?;
       if (token == null) throw _err(400, 'Thiếu token thiết bị.');
       if (m == 'PUT') {
-        if (!(b['platform'] == 'android' &&
-                b['provider'] == 'unifiedpush' &&
-                b['keys'] is Map ||
-            b['platform'] == 'ios' &&
-                b['provider'] == 'apns' &&
-                ['sandbox', 'production'].contains(b['apnsEnvironment'])))
+        if (!['android', 'ios'].contains(b['platform']) ||
+            b['provider'] != null && b['provider'] != 'fcm' ||
+            b['keys'] != null ||
+            b['apnsEnvironment'] != null)
           throw _err(400, 'Đăng ký không hợp lệ.');
-        final registrationId = _pushDevices[token]?['userId'] == uid
+        final registrationId =
+            _pushDevices[token]?['userId'] == uid &&
+                _pushDevices[token]?['serverOrigin'] == b['serverOrigin']
             ? _pushDevices[token]!['registrationId']
             : 'registration-${_next()}';
         _pushDevices[token] = {
@@ -764,7 +764,10 @@ class MockBackend {
           'registrationId': registrationId,
         };
         return {
-          'data': {'registrationId': registrationId},
+          'data': {
+            'registrationId': registrationId,
+            'serverOrigin': b['serverOrigin'],
+          },
         };
       }
       if (m == 'DELETE' &&

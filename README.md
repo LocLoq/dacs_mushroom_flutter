@@ -78,6 +78,8 @@ This test starts the native camera and decodes the actual PNG exported by the QR
 
 ## Phân quyền lô, ảnh chăm sóc và thông báo
 
-Xem [STAFF_WORKFLOW.md](STAFF_WORKFLOW.md) để cấu hình backend, UnifiedPush/ntfy cho Android, APNs trực tiếp cho iOS và giao thức refresh mới. Staff cần được admin thêm vào cơ sở và phân công từng lô trước khi thao tác. Push mặc định tắt cho tới khi có cấu hình ntfy/APNs.
+Xem [STAFF_WORKFLOW.md](STAFF_WORKFLOW.md) để cấu hình backend, Firebase/FCM cho Android và iOS và giao thức refresh mới. Staff cần được admin thêm vào cơ sở và phân công từng lô trước khi thao tác. Push mặc định tắt cho tới khi có cấu hình Firebase/APNs.
 
-Ba chế độ VPS / Mạng nội bộ / VS Code tunnel, đăng ký distributor và tài khoản ntfy: xem [PUSH_HOSTING.md](PUSH_HOSTING.md).
+Ba chế độ VPS / Mạng nội bộ / VS Code tunnel, cấu hình Firebase và đăng ký thiết bị: xem [PUSH_HOSTING.md](PUSH_HOSTING.md).
+
+Application ID/bundle ID hiện tại: `com.loql.layla.themushroomapp`. Đăng ký Android và iOS trong Firebase với đúng ID này; xem PUSH_HOSTING.md.

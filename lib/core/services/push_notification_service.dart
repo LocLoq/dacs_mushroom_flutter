@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:unifiedpush/unifiedpush.dart';
 import 'package:http/http.dart' as http;
 import '../network/api_config.dart';
 import '../network/farm_api.dart';
@@ -15,22 +14,6 @@ import '../../features/tasks/task_detail_screen.dart';
 import '../widgets/async_views.dart';
 
 const _contextKey = 'push_registration_context';
-final _local = FlutterLocalNotificationsPlugin();
-const _apns = MethodChannel('com.example.thu/apns');
-Future<Map<String, dynamic>?> _pushContext() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.reload();
-  final raw = prefs.getString(_contextKey);
-  return raw == null ? null : Map<String, dynamic>.from(jsonDecode(raw) as Map);
-}
-
-Future<void> _writeContext(Map<String, dynamic> value) async {
-  await (await SharedPreferences.getInstance()).setString(
-    _contextKey,
-    jsonEncode(value),
-  );
-}
-
 bool storedSessionMatchesContext(Map? session, Map context) {
   if (session?['server'] != context['origin']) return false;
   try {
@@ -50,155 +33,50 @@ bool storedSessionMatchesContext(Map? session, Map context) {
 
 bool pushMatchesContext(Map message, Map context) =>
     context['registrationId'] is String &&
+    message['registrationId'] == context['registrationId'] &&
     message['userId'] == '${context['user']}' &&
-    message['origin'] == context['origin'] &&
-    message['registrationId'] == context['registrationId'];
-Future<void> _localInit() async {
-  await _local.initialize(
-    settings: const InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-    ),
-    onDidReceiveNotificationResponse: (response) {
-      if (response.payload != null)
-        PushNotificationService.instance.open(
-          jsonDecode(response.payload!) as Map,
-        );
-    },
+    message['origin'] == context['origin'];
+Future<Map<String, dynamic>?> _context() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final value = prefs.getString(_contextKey);
+  return value == null
+      ? null
+      : Map<String, dynamic>.from(jsonDecode(value) as Map);
+}
+
+Future<void> _saveContext(Map<String, dynamic> value) async {
+  await (await SharedPreferences.getInstance()).setString(
+    _contextKey,
+    jsonEncode(value),
   );
 }
 
 @pragma('vm:entry-point')
-Future<void> initializeUnifiedPush() async {
-  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
-  await _localInit();
-  await UnifiedPush.initialize(
-    onNewEndpoint: (endpoint, instance) =>
-        unawaited(_endpoint(endpoint, instance)),
-    onMessage: (message, instance) => unawaited(_receive(message, instance)),
-    onUnregistered: (instance) => unawaited(_revoked(instance)),
-    onRegistrationFailed: (reason, instance) =>
-        PushNotificationService.instance.status.value =
-            'Không đăng ký được UnifiedPush: $reason',
-    onTempUnavailable: (_) => PushNotificationService.instance.status.value =
-        'Máy chủ thông báo tạm thời không kết nối được.',
-  );
-}
-
-Future<void> _endpoint(PushEndpoint endpoint, String instance) async {
-  try {
-    final context = await _pushContext();
-    if (context == null ||
-        context['instance'] != instance ||
-        endpoint.temporary ||
-        endpoint.pubKeySet == null)
-      return;
-    if (Uri.parse(endpoint.url).origin !=
-        Uri.parse(context['ntfyUrl'] as String).origin) {
-      PushNotificationService.instance.status.value =
-          'Distributor dùng máy chủ khác. Cấu hình URL ntfy rồi đăng ký lại.';
-      return;
-    }
-    final session = await LocalSession.store.read();
-    if (!storedSessionMatchesContext(session, context)) return;
-    final response = await http
-        .put(
-          Uri.parse('${context['origin']}/api/notifications/devices'),
-          headers: {
-            'Authorization': 'Bearer ${session!['token']}',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-Tunnel-Skip-AntiPhishing-Page': 'true',
-          },
-          body: jsonEncode({
-            'platform': 'android',
-            'provider': 'unifiedpush',
-            'token': endpoint.url,
-            'keys': {
-              'p256dh': endpoint.pubKeySet!.pubKey,
-              'auth': endpoint.pubKeySet!.auth,
-            },
-          }),
-        )
-        .timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200)
-      throw StateError('Đăng ký endpoint: HTTP ${response.statusCode}');
-    final registrationId =
-        (jsonDecode(response.body)['data'] as Map)['registrationId'];
-    if ((await _pushContext())?['instance'] != instance) {
-      // Registration may finish after logout. Cancel it using the captured session.
-      await http.delete(
-        Uri.parse('${context['origin']}/api/notifications/devices'),
-        headers: {
-          'Authorization': 'Bearer ${session['token']}',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'token': endpoint.url,
-          'registrationId': registrationId,
-        }),
-      );
-      return;
-    }
-    await _writeContext({
-      ...context,
-      'token': endpoint.url,
-      'provider': 'unifiedpush',
-      'registrationId': registrationId,
-    });
-    PushNotificationService.instance.status.value = 'Đã đăng ký UnifiedPush';
-  } catch (e) {
-    PushNotificationService.instance.status.value = e.toString();
-  }
-}
-
-Future<void> _revoked(String instance) async {
-  if ((await _pushContext())?['instance'] != instance) return;
-  await PushNotificationService.instance.unregister();
-  PushNotificationService.instance.status.value =
-      'Endpoint đã bị thu hồi. Chọn đăng ký lại.';
-}
-
-Future<void> _receive(PushMessage message, String instance) async {
-  if (!message.decrypted) return;
-  try {
-    final context = await _pushContext();
-    final payload = jsonDecode(utf8.decode(message.content)) as Map;
-    final session = await LocalSession.store.read();
-    if (context == null ||
-        context['instance'] != instance ||
-        !storedSessionMatchesContext(session, context) ||
-        !pushMatchesContext(payload, context))
-      return;
-    WorkflowRefreshService.instance.refreshAll();
-    await _local.show(
-      id: (payload['notificationId'] as String).hashCode & 0x7fffffff,
-      title: 'Công việc',
-      body: 'Có cập nhật công việc. Mở ứng dụng để xem.',
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'workflow',
-          'Công việc',
-          importance: Importance.high,
-          priority: Priority.high,
-        ),
-      ),
-      payload: jsonEncode(payload),
-    );
-  } catch (_) {}
+Future<void> mushroomBackgroundMessage(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  // OS displays a generic notification. Opening always rechecks the current
+  // account, registration and API permissions in the foreground.
 }
 
 class PushNotificationService with WidgetsBindingObserver {
   static final instance = PushNotificationService();
-  final status = ValueNotifier<String>('Chưa đăng ký push');
-  Map<String, dynamic>? config;
+  static const enabled = bool.fromEnvironment(
+    'PUSH_ENABLED',
+    defaultValue: true,
+  );
+  final status = ValueNotifier<String>('Thông báo đẩy chưa sẵn sàng');
   GlobalKey<NavigatorState>? _navigator;
   Map? _pending;
+  String? _deviceToken;
   bool _started = false, _opening = false;
+  Timer? _retry;
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
   Future<void> _syncing = Future.value();
-  String? _apnsToken;
   Future<void> start(GlobalKey<NavigatorState> navigator) async {
     _navigator = navigator;
     if (_started ||
+        !enabled ||
         kIsWeb ||
         ![
           TargetPlatform.android,
@@ -206,58 +84,66 @@ class PushNotificationService with WidgetsBindingObserver {
         ].contains(defaultTargetPlatform))
       return;
     try {
+      await Firebase.initializeApp();
       _started = true;
       WidgetsBinding.instance.addObserver(this);
+      FirebaseMessaging.onBackgroundMessage(mushroomBackgroundMessage);
       LocalSession.changes.addListener(_changed);
       ApiConfig.changes.addListener(_changed);
       LocalSession.beforeLogout.add(_logout);
-      if (defaultTargetPlatform == TargetPlatform.android) {
-        final launch = await _local.getNotificationAppLaunchDetails();
-        if (launch?.didNotificationLaunchApp == true &&
-            launch?.notificationResponse?.payload != null)
-          open(jsonDecode(launch!.notificationResponse!.payload!) as Map);
-      } else {
-        _apns.setMethodCallHandler((call) async {
-          if (call.method == 'token') {
-            _apnsToken = call.arguments as String;
-            _changed();
-          }
-          if (call.method == 'opened') open(call.arguments as Map);
-          if (call.method == 'foreground') {
-            final context = await _pushContext();
-            if (context != null &&
-                pushMatchesContext(call.arguments as Map, context) &&
-                LocalSession.isLoggedIn) {
-              WorkflowRefreshService.instance.refreshAll();
-              final navigator = _navigator?.currentState;
-              if (navigator != null && navigator.mounted)
-                ScaffoldMessenger.of(navigator.context).showSnackBar(
-                  SnackBar(
-                    content: const Text('Có cập nhật công việc'),
-                    action: SnackBarAction(
-                      label: 'Xem',
-                      onPressed: () => open(call.arguments as Map),
-                    ),
-                  ),
-                );
-            }
-          }
-          if (call.method == 'error')
-            status.value = 'APNs: ' + call.arguments.toString();
-        });
-        final pending = await _apns.invokeMapMethod<String, dynamic>('pending');
-        if (pending != null) open(pending);
-      }
+      _subscriptions.add(
+        FirebaseMessaging.instance.onTokenRefresh.listen((token) {
+          _deviceToken = token;
+          _changed();
+        }),
+      );
+      _subscriptions.add(
+        FirebaseMessaging.onMessage.listen(
+          (message) => unawaited(_foreground(message)),
+        ),
+      );
+      _subscriptions.add(
+        FirebaseMessaging.onMessageOpenedApp.listen(
+          (message) => open(message.data),
+        ),
+      );
+      final initial = await FirebaseMessaging.instance.getInitialMessage();
+      if (initial != null) _pending = initial.data;
       _changed();
-    } catch (e) {
-      status.value = 'Push chưa sẵn sàng: $e';
+    } catch (_) {
+      status.value = 'Chưa có cấu hình Firebase trong ứng dụng.';
       stop();
     }
   }
 
+  Future<void> _foreground(RemoteMessage message) async {
+    final context = await _context();
+    if (context == null ||
+        !LocalSession.isLoggedIn ||
+        !pushMatchesContext(message.data, context) ||
+        context['origin'] != ApiConfig.origin ||
+        context['user'] != LocalSession.userId)
+      return;
+    WorkflowRefreshService.instance.refreshAll();
+    final navigator = _navigator?.currentState;
+    if (navigator != null && navigator.mounted)
+      ScaffoldMessenger.of(navigator.context).showSnackBar(
+        SnackBar(
+          content: const Text('Có cập nhật công việc'),
+          action: SnackBarAction(
+            label: 'Xem',
+            onPressed: () => open(message.data),
+          ),
+        ),
+      );
+  }
+
   void _changed() {
     _syncing = _syncing.then((_) => _sync()).catchError((Object e) {
-      status.value = 'Push chưa sẵn sàng: $e';
+      status.value = 'Đăng ký thông báo chưa thành công. Sẽ thử lại.';
+      _retry?.cancel();
+      if (_started && LocalSession.isLoggedIn)
+        _retry = Timer(const Duration(seconds: 5), _changed);
     });
   }
 
@@ -268,63 +154,73 @@ class PushNotificationService with WidgetsBindingObserver {
 
   void stop() {
     _started = false;
+    _retry?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     LocalSession.changes.removeListener(_changed);
     ApiConfig.changes.removeListener(_changed);
     LocalSession.beforeLogout.remove(_logout);
-    WidgetsBinding.instance.removeObserver(this);
-    _apns.setMethodCallHandler(null);
+    for (final subscription in _subscriptions) {
+      unawaited(subscription.cancel());
+    }
+    _subscriptions.clear();
   }
 
   Future<void> unregister() async {
-    final context = await _pushContext();
+    final context = await _context();
     await (await SharedPreferences.getInstance()).remove(_contextKey);
-    if (context == null) return;
-    final session = await LocalSession.store.read();
-    if (session?['server'] != context['origin'] ||
+    if (context == null ||
+        context['provider'] != 'fcm' ||
         context['token'] == null ||
         context['registrationId'] == null)
       return;
+    final session = await LocalSession.store.read();
+    if (!storedSessionMatchesContext(session, context)) return;
+    await _cancelRegistration(
+      context['origin'] as String,
+      session!['token'] as String,
+      context['token'] as String,
+      context['registrationId'] as String,
+    );
+  }
+
+  Future<void> _cancelRegistration(
+    String origin,
+    String auth,
+    String token,
+    String id,
+  ) async {
     try {
       await http
           .delete(
-            Uri.parse('${context['origin']}/api/notifications/devices'),
+            Uri.parse('$origin/api/notifications/devices'),
             headers: {
-              'Authorization': 'Bearer ${session!['token']}',
+              'Authorization': 'Bearer $auth',
               'Content-Type': 'application/json',
               'Accept': 'application/json',
               'X-Tunnel-Skip-AntiPhishing-Page': 'true',
             },
-            body: jsonEncode({
-              'token': context['token'],
-              'registrationId': context['registrationId'],
-            }),
+            body: jsonEncode({'token': token, 'registrationId': id}),
           )
           .timeout(const Duration(seconds: 10));
     } catch (_) {}
   }
 
   Future<void> _logout() async {
-    final context = await _pushContext();
     await unregister();
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      if (context?['instance'] != null)
-        await UnifiedPush.unregister(context!['instance'] as String);
-      await _local.cancelAll();
-    } else {
-      await _apns.invokeMethod<void>('unregister');
-    }
+    _retry?.cancel();
+    _deviceToken = null;
     _pending = null;
-    _apnsToken = null;
-    config = null;
-  }
-
-  Future<void> selectDistributor(String distributor) async {
-    await _logout();
-    await UnifiedPush.saveDistributor(distributor);
-    _changed();
+    if (_started) {
+      try {
+        await FirebaseMessaging.instance.setAutoInitEnabled(false);
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (_) {}
+    }
   }
 
   Future<void> registerAgain() async {
+    if (!_started && _navigator != null) await start(_navigator!);
+    if (!_started) return;
     await _logout();
     _changed();
   }
@@ -332,101 +228,91 @@ class PushNotificationService with WidgetsBindingObserver {
   Future<void> _sync() async {
     if (!_started) return;
     if (!LocalSession.isLoggedIn) {
-      // Session restoration happens after startup; keep its registration until resolved.
       if (await LocalSession.store.read() == null) await _logout();
       return;
     }
-    final origin = ApiConfig.origin, user = LocalSession.userId;
-    final auth = LocalSession.tokenFor(origin);
+    final origin = ApiConfig.origin,
+        user = LocalSession.userId,
+        auth = LocalSession.tokenFor(ApiConfig.origin);
     if (auth == null || user == null) return;
-    final result = await FarmApi.instance.get('/notifications/push-config');
+    final response = await FarmApi.instance.get('/notifications/push-config');
     if (origin != ApiConfig.origin ||
         user != LocalSession.userId ||
         auth != LocalSession.tokenFor(origin))
       return;
-    config = Map<String, dynamic>.from(result['data'] as Map);
-    final channels = config!['channels'] as Map;
-    final android = defaultTargetPlatform == TargetPlatform.android;
-    var context = await _pushContext();
+    final config = response['data'] as Map;
+    var context = await _context();
     if (context != null &&
-        (context['origin'] != origin ||
+        (context['provider'] != 'fcm' ||
+            context['origin'] != origin ||
+            context['serverOrigin'] != origin ||
             context['user'] != user ||
-            context['version'] != config!['version'])) {
-      await _logout();
-      config = Map<String, dynamic>.from(result['data'] as Map);
+            context['version'] != config['version'] ||
+            _deviceToken != null && _deviceToken != context['token'])) {
+      await unregister();
       context = null;
     }
-    if (channels[android ? 'unifiedpush' : 'apns'] != true) {
+    if ((config['channels'] as Map)['fcm'] != true) {
       status.value =
-          'Kênh push chưa cấu hình. Thông báo trong app vẫn hoạt động.';
+          'Máy chủ chưa bật thông báo đẩy. Thông báo trong app vẫn hoạt động.';
       return;
     }
-    context ??= {
-      'origin': origin,
-      'user': user,
-      'version': config!['version'],
-      'ntfyUrl': config!['ntfyUrl'],
-      'instance': DateTime.now().microsecondsSinceEpoch.toString(),
-    };
-    await _writeContext(context);
-    if (android) {
-      await _local
-          .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin
-          >()
-          ?.requestNotificationsPermission();
-      if (!await UnifiedPush.tryUseCurrentOrDefaultDistributor()) {
-        status.value = 'Cài ntfy distributor và chọn trong cài đặt thông báo.';
-        return;
-      }
-      await UnifiedPush.register(
-        instance: context['instance'] as String,
-        vapid: config!['vapidPublicKey'] as String?,
-      );
-    } else {
-      final native = await _apns.invokeMapMethod<String, dynamic>('register');
-      if (native?['granted'] != true) {
-        status.value = 'Chưa cho phép thông báo APNs';
-        return;
-      }
-      _apnsToken ??= native?['token'] as String?;
-      if (_apnsToken == null) {
-        status.value = 'Đang chờ APNs token/quyền thông báo';
-        return;
-      }
-      if (_apnsToken != context['token'] || context['registrationId'] == null) {
-        final registered = await FarmApi.instance
-            .put('/notifications/devices', {
-              'platform': 'ios',
-              'provider': 'apns',
-              'token': _apnsToken,
-              'apnsEnvironment': native?['environment'] ?? 'production',
-            });
-        if (origin != ApiConfig.origin ||
-            user != LocalSession.userId ||
-            auth != LocalSession.tokenFor(origin)) {
-          await http.delete(
-            Uri.parse('$origin/api/notifications/devices'),
-            headers: {
-              'Authorization': 'Bearer $auth',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'token': _apnsToken,
-              'registrationId': (registered['data'] as Map)['registrationId'],
-            }),
-          );
-          return;
-        }
-        await _writeContext({
-          ...context,
-          'token': _apnsToken,
-          'provider': 'apns',
-          'registrationId': (registered['data'] as Map)['registrationId'],
-        });
-      }
-      status.value = 'Đã đăng ký APNs';
+    if (config['projectId'] != null &&
+        Firebase.app().options.projectId != config['projectId']) {
+      status.value = 'Cấu hình thông báo của ứng dụng và máy chủ chưa khớp.';
+      return;
     }
+    await FirebaseMessaging.instance.setAutoInitEnabled(true);
+    final permission = await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    if (permission.authorizationStatus == AuthorizationStatus.denied) {
+      status.value = 'Bạn chưa cho phép thông báo trên thiết bị.';
+      return;
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS &&
+        await FirebaseMessaging.instance.getAPNSToken() == null) {
+      status.value = 'Đang chờ đăng ký thông báo iOS';
+      _retry?.cancel();
+      _retry = Timer(const Duration(seconds: 2), _changed);
+      return;
+    }
+    _deviceToken ??= await FirebaseMessaging.instance.getToken();
+    final token = _deviceToken;
+    if (token == null ||
+        origin != ApiConfig.origin ||
+        user != LocalSession.userId ||
+        auth != LocalSession.tokenFor(origin))
+      return;
+    if (context == null) {
+      final registered = await FarmApi.instance.put('/notifications/devices', {
+        'platform': defaultTargetPlatform == TargetPlatform.iOS
+            ? 'ios'
+            : 'android',
+        'provider': 'fcm',
+        'token': token,
+        'serverOrigin': origin,
+      });
+      final id = (registered['data'] as Map)['registrationId'] as String;
+      if (origin != ApiConfig.origin ||
+          user != LocalSession.userId ||
+          auth != LocalSession.tokenFor(origin)) {
+        await _cancelRegistration(origin, auth, token, id);
+        return;
+      }
+      await _saveContext({
+        'origin': origin,
+        'serverOrigin': origin,
+        'user': user,
+        'token': token,
+        'registrationId': id,
+        'provider': 'fcm',
+        'version': config['version'],
+      });
+    }
+    status.value = 'Đã đăng ký thông báo trên thiết bị';
     unawaited(_tryOpen());
   }
 
@@ -444,7 +330,7 @@ class PushNotificationService with WidgetsBindingObserver {
       );
       return;
     }
-    final context = await _pushContext();
+    final context = await _context();
     if (context == null ||
         !pushMatchesContext(message, context) ||
         message['origin'] != ApiConfig.origin ||
