@@ -83,3 +83,5 @@ Xem [STAFF_WORKFLOW.md](STAFF_WORKFLOW.md) để cấu hình backend, Firebase/F
 Ba chế độ VPS / Mạng nội bộ / VS Code tunnel, cấu hình Firebase và đăng ký thiết bị: xem [PUSH_HOSTING.md](PUSH_HOSTING.md).
 
 Application ID/bundle ID hiện tại: `com.loql.layla.themushroomapp`. Đăng ký Android và iOS trong Firebase với đúng ID này; xem PUSH_HOSTING.md.
+
+Màn phân công cơ sở/lô hỗ trợ chọn nhiều nhân viên, chỉ hiển thị người chưa được thêm và đủ điều kiện. Khi lưu lỗi, giữ lựa chọn để chỉnh lại; xem STAFF_WORKFLOW.md.

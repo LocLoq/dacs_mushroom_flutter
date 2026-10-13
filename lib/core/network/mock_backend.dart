@@ -638,78 +638,150 @@ class MockBackend {
   J _assignmentRoute(String m, List<String> s, J q, J b) {
     _need(['admin']);
     final isBatch = s[0] == 'cultivation-batches';
-    final id = int.tryParse(s[1]);
+    final parentId = int.tryParse(s[1]);
     final parents = isBatch ? _batches : _facilities;
-    if (id == null || !parents.any((row) => row.i('id') == id))
+    if (parentId == null || !parents.any((row) => row.i('id') == parentId))
       throw _err(404, 'Không tìm thấy đối tượng.');
     final members = (isBatch ? _batchMembers : _facilityMembers).putIfAbsent(
-      id,
+      parentId,
       () => <int>{},
     );
     final field = isBatch ? 'batchId' : 'facilityId';
+    final facilityId = isBatch
+        ? parents.firstWhere((row) => row.i('id') == parentId).i('facilityId')
+        : parentId;
+    bool matches(J user, String search) =>
+        search.isEmpty ||
+        user.s('full_name').toLowerCase().contains(search) ||
+        user.s('username').toLowerCase().contains(search);
     if (m == 'GET') {
       final search = (q['search'] ?? '').toString().toLowerCase();
-      return _env([
-        for (final uid in members)
-          if (_users.any(
-            (u) =>
-                u.i('id') == uid &&
-                (search.isEmpty ||
-                    u.s('full_name').toLowerCase().contains(search) ||
-                    u.s('username').toLowerCase().contains(search)),
-          ))
-            {
-              field: id,
-              'userId': uid,
-              'user': _personOf(uid),
-              'createdAt': _nowIso(),
-            },
-      ], q);
+      if (q.containsKey('available') &&
+          !['true', 'false'].contains(q['available'].toString()))
+        throw _err(400, 'available phải là true hoặc false');
+      if (q['available'].toString() == 'true') {
+        final users =
+            _users
+                .where(
+                  (u) =>
+                      _roleName(u.i('role_id')) == 'staff' &&
+                      !members.contains(u.i('id')) &&
+                      (!isBatch ||
+                          (_facilityMembers[facilityId]?.contains(u.i('id')) ??
+                              false)) &&
+                      matches(u, search),
+                )
+                .toList()
+              ..sort((a, b) {
+                final compare = a.s('full_name').compareTo(b.s('full_name'));
+                return compare != 0
+                    ? compare
+                    : (a.i('id') ?? 0).compareTo(b.i('id') ?? 0);
+              });
+        return _env(
+          [
+            for (final u in users)
+              {
+                'id': u['id'],
+                'username': u['username'],
+                'full_name': u['full_name'],
+              },
+          ],
+          q,
+          defLimit: 20,
+        );
+      }
+      return _env(
+        [
+          for (final uid in members)
+            if (_users.any((u) => u.i('id') == uid && matches(u, search)))
+              {
+                field: parentId,
+                'userId': uid,
+                'user': _personOf(uid),
+                'createdAt': _nowIso(),
+              },
+        ],
+        q,
+        defLimit: 20,
+      );
     }
-    final uid = m == 'DELETE'
-        ? int.tryParse(s.length > 3 ? s[3] : '')
-        : (b['userId'] as num?)?.toInt();
-    if (uid == null ||
-        !_users.any(
-          (u) => u.i('id') == uid && _roleName(u.i('role_id')) == 'staff',
-        ))
-      throw _err(400, 'Chỉ phân công tài khoản nhân viên.');
+    int parseId(Object? value) {
+      final int? result =
+          value is num && value.isFinite && value == value.truncateToDouble()
+          ? value.toInt()
+          : value is String && RegExp(r'^\d+$').hasMatch(value)
+          ? int.tryParse(value)
+          : null;
+      if (result == null || result <= 0 || result > 9007199254740991)
+        throw _err(400, 'ID không hợp lệ.');
+      return result;
+    }
+
     if (m == 'POST') {
-      if (isBatch &&
-          !(_facilityMembers[parents
-                      .firstWhere((row) => row.i('id') == id)
-                      .i('facilityId')]
-                  ?.contains(uid) ??
-              false))
-        throw _err(400, 'Nhân viên phải thuộc cơ sở của lô.');
-      if (members.add(uid))
-        _addNotice(
-          uid,
-          'PERMISSION_GRANTED',
-          'Bạn được cấp quyền cơ sở hoặc lô.',
-          batchId: isBatch ? id : null,
-        );
-    } else if (m == 'DELETE') {
-      if (members.remove(uid))
-        _addNotice(
-          uid,
-          'PERMISSION_REVOKED',
-          'Quyền cơ sở hoặc lô đã được thu hồi.',
-          batchId: isBatch ? id : null,
-        );
-      if (!isBatch) {
-        for (final batch in _batches.where(
-          (row) => row.i('facilityId') == id,
-        )) {
-          _batchMembers[batch.i('id')]?.remove(uid);
+      if (b.keys.any((key) => !['userId', 'userIds'].contains(key)) ||
+          b.containsKey('userId') == b.containsKey('userIds'))
+        throw _err(400, 'Chỉ gửi userId hoặc userIds.');
+      final bulk = b.containsKey('userIds');
+      final raw = bulk ? b['userIds'] : [b['userId']];
+      if (raw is! List || raw.isEmpty || raw.length > 100)
+        throw _err(400, 'Chọn từ 1 đến 100 nhân viên.');
+      final ids = raw.map(parseId).toSet().toList();
+      for (final uid in ids) {
+        final found = _users.where((u) => u.i('id') == uid).toList();
+        final name = found.isEmpty ? 'ID $uid' : found.first.s('full_name');
+        if (found.isEmpty || _roleName(found.first.i('role_id')) != 'staff')
+          throw _err(
+            400,
+            'Không thể phân công: $name. Chỉ chọn tài khoản nhân viên.',
+            'ASSIGNMENT_INELIGIBLE',
+          );
+        if (isBatch && !(_facilityMembers[facilityId]?.contains(uid) ?? false))
+          throw _err(
+            400,
+            'Nhân viên không còn thuộc cơ sở của lô: $name',
+            'ASSIGNMENT_INELIGIBLE',
+          );
+      }
+      var addedCount = 0;
+      for (final uid in ids) {
+        if (members.add(uid)) {
+          addedCount++;
+          _addNotice(
+            uid,
+            'PERMISSION_GRANTED',
+            'Bạn được cấp quyền cơ sở hoặc lô.',
+            batchId: isBatch ? parentId : null,
+          );
         }
       }
-    } else {
-      throw _err(405, 'Phương thức không hợp lệ.');
+      if (addedCount > 0)
+        WorkflowRefreshService.instance.invalidate('permissions');
+      final rows = [
+        for (final uid in ids) {field: parentId, 'userId': uid},
+      ];
+      return bulk
+          ? {'data': rows, 'addedCount': addedCount}
+          : {'data': rows.first};
     }
+    if (m != 'DELETE') throw _err(405, 'Phương thức không hợp lệ.');
+    final uid = parseId(s.length > 3 ? s[3] : null);
+    if (members.remove(uid))
+      _addNotice(
+        uid,
+        'PERMISSION_REVOKED',
+        'Quyền cơ sở hoặc lô đã được thu hồi.',
+        batchId: isBatch ? parentId : null,
+      );
+    if (!isBatch)
+      for (final batch in _batches.where(
+        (row) => row.i('facilityId') == parentId,
+      )) {
+        _batchMembers[batch.i('id')]?.remove(uid);
+      }
     WorkflowRefreshService.instance.invalidate('permissions');
     return {
-      'data': {field: id, 'userId': uid},
+      'data': {field: parentId, 'userId': uid},
     };
   }
 

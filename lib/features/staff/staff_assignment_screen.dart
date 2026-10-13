@@ -12,8 +12,7 @@ class StaffAssignmentScreen extends StatefulWidget {
     required this.title,
     this.facilityId,
   });
-  final String path;
-  final String title;
+  final String path, title;
   final int? facilityId;
   @override
   State<StaffAssignmentScreen> createState() => _StaffAssignmentScreenState();
@@ -21,47 +20,51 @@ class StaffAssignmentScreen extends StatefulWidget {
 
 class _StaffAssignmentScreenState extends State<StaffAssignmentScreen> {
   final _key = GlobalKey<PagedListViewState>();
+  bool _adding = false;
   Future<void> _add() async {
-    final selection = await pickOneFrom(
-      context,
-      PickerSource(
-        title: 'Chọn nhân viên',
-        fetch: (page, search) async {
-          final response = await FarmApi.instance.get(
-            widget.facilityId == null
-                ? '/admin/users'
-                : '/production-facilities/${widget.facilityId}/staff',
-            query: {
-              'page': page,
-              'limit': 20,
-              if (widget.facilityId == null) 'role': 'staff',
-              'search': search,
-            },
-          );
-          if (widget.facilityId != null)
-            response['data'] = response
-                .l('data')
-                .map((item) => item.m('user')!)
-                .toList();
-          return PageData.from(response);
-        },
-        label: (item) {
-          final user = item.m('user') ?? item;
-          return user.s('full_name').isEmpty
-              ? user.s('username')
-              : user.s('full_name');
-        },
-        subtitle: (item) => (item.m('user') ?? item).s('username'),
-      ),
-    );
-    if (selection == null || selection.isEmpty) return;
+    if (_adding) return;
+    setState(() => _adding = true);
+    int addedCount = 0;
     try {
-      await FarmApi.instance.post(widget.path, {
-        'userId': selection.first['id'],
-      });
-      _key.currentState?.load();
-    } catch (e) {
-      if (mounted) toast(context, e.toString(), error: true);
+      final selected = await pickManyFrom(
+        context,
+        PickerSource(
+          title: 'Chọn nhân viên',
+          emptyText: 'Không còn nhân viên đủ điều kiện để thêm.',
+          fetch: (page, search) async => PageData.from(
+            await FarmApi.instance.get(
+              widget.path,
+              query: {
+                'available': true,
+                'page': page,
+                'limit': 20,
+                'search': search,
+              },
+            ),
+          ),
+          label: (item) => item.s('full_name').isEmpty
+              ? item.s('username')
+              : item.s('full_name'),
+          subtitle: (item) => item.s('username'),
+        ),
+        maxSelected: 100,
+        onConfirm: (selection) async {
+          final response = await FarmApi.instance.post(widget.path, {
+            'userIds': selection.map((item) => item.i('id')).toList(),
+          });
+          addedCount = response.i('addedCount') ?? 0;
+          await _key.currentState?.load();
+        },
+      );
+      if (mounted && selected != null)
+        toast(
+          context,
+          addedCount > 0
+              ? 'Đã thêm $addedCount nhân viên.'
+              : 'Danh sách phân công đã được cập nhật.',
+        );
+    } finally {
+      if (mounted) setState(() => _adding = false);
     }
   }
 
@@ -75,7 +78,7 @@ class _StaffAssignmentScreenState extends State<StaffAssignmentScreen> {
     if (!ok) return;
     try {
       await FarmApi.instance.delete('${widget.path}/${item.i('userId')}');
-      _key.currentState?.load();
+      await _key.currentState?.load();
     } catch (e) {
       if (mounted) toast(context, e.toString(), error: true);
     }
@@ -85,7 +88,7 @@ class _StaffAssignmentScreenState extends State<StaffAssignmentScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(widget.title)),
     floatingActionButton: FloatingActionButton.extended(
-      onPressed: _add,
+      onPressed: _adding ? null : _add,
       icon: const Icon(Icons.person_add_alt),
       label: const Text('Thêm nhân viên'),
     ),

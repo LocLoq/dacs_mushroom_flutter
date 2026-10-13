@@ -24,12 +24,14 @@ enum FieldType {
 /// Nguồn dữ liệu cho ô chọn tham chiếu (có search + phân trang, giữ lựa chọn qua trang).
 class PickerSource {
   final String title;
+  final String emptyText;
   final Future<PageData> Function(int page, String search) fetch;
   final String Function(J item) label;
   final String Function(J item)? subtitle;
 
   const PickerSource({
     required this.title,
+    this.emptyText = 'Chưa có dữ liệu.',
     required this.fetch,
     required this.label,
     this.subtitle,
@@ -148,7 +150,9 @@ class _FormBodyState extends State<_FormBody> {
         case FieldType.number:
         case FieldType.decimal:
         case FieldType.password:
-          _ctrl[f.key] = TextEditingController(text: v == null ? '' : v.toString());
+          _ctrl[f.key] = TextEditingController(
+            text: v == null ? '' : v.toString(),
+          );
           break;
         case FieldType.date:
         case FieldType.dateTime:
@@ -306,7 +310,8 @@ class _FormBodyState extends State<_FormBody> {
       await widget.onSubmit(body);
       if (mounted) Navigator.pop(context, true);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _topError = e.message); // giữ nguyên dữ liệu nhập
+      if (mounted)
+        setState(() => _topError = e.message); // giữ nguyên dữ liệu nhập
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -326,7 +331,10 @@ class _FormBodyState extends State<_FormBody> {
     if (d == null || !mounted) return;
     var out = DateTime(d.year, d.month, d.day, cur.hour, cur.minute);
     if (f.type == FieldType.dateTime) {
-      final t = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(cur));
+      final t = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(cur),
+      );
       if (t != null) out = DateTime(d.year, d.month, d.day, t.hour, t.minute);
     } else {
       out = DateTime(d.year, d.month, d.day, 12);
@@ -341,7 +349,11 @@ class _FormBodyState extends State<_FormBody> {
       isScrollControlled: true,
       useSafeArea: true,
       constraints: const BoxConstraints(maxWidth: 680),
-      builder: (ctx) => _PickerSheet(source: f.picker!, many: many, selected: _picks[f.key] ?? []),
+      builder: (ctx) => _PickerSheet(
+        source: f.picker!,
+        many: many,
+        selected: _picks[f.key] ?? [],
+      ),
     );
     if (res != null) setState(() => _picks[f.key] = res);
   }
@@ -366,11 +378,16 @@ class _FormBodyState extends State<_FormBody> {
           maxLines: f.type == FieldType.multiline ? 6 : 1,
           keyboardType: switch (f.type) {
             FieldType.integer => TextInputType.number,
-            FieldType.number || FieldType.decimal => const TextInputType.numberWithOptions(decimal: true),
+            FieldType.number || FieldType.decimal =>
+              const TextInputType.numberWithOptions(decimal: true),
             FieldType.multiline => TextInputType.multiline,
             _ => TextInputType.text,
           },
-          decoration: InputDecoration(labelText: label, helperText: f.helper, errorText: err),
+          decoration: InputDecoration(
+            labelText: label,
+            helperText: f.helper,
+            errorText: err,
+          ),
         );
       case FieldType.date:
       case FieldType.dateTime:
@@ -378,8 +395,8 @@ class _FormBodyState extends State<_FormBody> {
         final shown = d == null
             ? ''
             : (f.type == FieldType.date
-                ? fmtDate(d.toIso8601String())
-                : fmtDateTime(d.toIso8601String()));
+                  ? fmtDate(d.toIso8601String())
+                  : fmtDateTime(d.toIso8601String()));
         return InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: (f.readOnly || _busy) ? null : () => _pickDate(f),
@@ -394,8 +411,14 @@ class _FormBodyState extends State<_FormBody> {
                     )
                   : const Icon(Icons.event_rounded),
             ),
-            child: Text(shown.isEmpty ? 'Chọn ngày' : shown,
-                style: TextStyle(color: shown.isEmpty ? theme.colorScheme.onSurfaceVariant : null)),
+            child: Text(
+              shown.isEmpty ? 'Chọn ngày' : shown,
+              style: TextStyle(
+                color: shown.isEmpty
+                    ? theme.colorScheme.onSurfaceVariant
+                    : null,
+              ),
+            ),
           ),
         );
       case FieldType.choice:
@@ -404,15 +427,20 @@ class _FormBodyState extends State<_FormBody> {
           isExpanded: true,
           decoration: InputDecoration(labelText: label, errorText: err),
           items: [
-            for (final e in f.options!.entries) DropdownMenuItem(value: e.key, child: Text(e.value)),
+            for (final e in f.options!.entries)
+              DropdownMenuItem(value: e.key, child: Text(e.value)),
           ],
-          onChanged: (f.readOnly || _busy) ? null : (v) => setState(() => _val[f.key] = v),
+          onChanged: (f.readOnly || _busy)
+              ? null
+              : (v) => setState(() => _val[f.key] = v),
         );
       case FieldType.check:
         return CheckboxListTile(
           contentPadding: EdgeInsets.zero,
           value: _val[f.key] == true,
-          onChanged: _busy ? null : (v) => setState(() => _val[f.key] = v == true),
+          onChanged: _busy
+              ? null
+              : (v) => setState(() => _val[f.key] = v == true),
           title: Text(f.label),
           subtitle: f.helper == null ? null : Text(f.helper!),
           controlAffinity: ListTileControlAffinity.leading,
@@ -431,15 +459,19 @@ class _FormBodyState extends State<_FormBody> {
               suffixIcon: const Icon(Icons.arrow_drop_down_rounded),
             ),
             child: picks.isEmpty
-                ? Text(many ? 'Chọn (có thể chọn nhiều)' : 'Chọn',
-                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
+                ? Text(
+                    many ? 'Chọn (có thể chọn nhiều)' : 'Chọn',
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                  )
                 : many
-                    ? Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [for (final p in picks) Chip(label: Text(p.s('label')))],
-                      )
-                    : Text(picks.first.s('label')),
+                ? Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final p in picks) Chip(label: Text(p.s('label'))),
+                    ],
+                  )
+                : Text(picks.first.s('label')),
           ),
         );
     }
@@ -449,7 +481,9 @@ class _FormBodyState extends State<_FormBody> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -457,7 +491,9 @@ class _FormBodyState extends State<_FormBody> {
             padding: const EdgeInsets.fromLTRB(20, 16, 8, 4),
             child: Row(
               children: [
-                Expanded(child: Text(widget.title, style: theme.textTheme.titleLarge)),
+                Expanded(
+                  child: Text(widget.title, style: theme.textTheme.titleLarge),
+                ),
                 IconButton(
                   onPressed: _busy ? null : () => Navigator.pop(context, false),
                   icon: const Icon(Icons.close_rounded),
@@ -479,7 +515,13 @@ class _FormBodyState extends State<_FormBody> {
                         color: AppColors.dangerSoft,
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: Text(_topError!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),
+                      child: Text(
+                        _topError!,
+                        style: const TextStyle(
+                          color: AppColors.danger,
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
                   for (final f in widget.fields) ...[
                     _field(f),
@@ -495,7 +537,9 @@ class _FormBodyState extends State<_FormBody> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: _busy ? null : () => Navigator.pop(context, false),
+                    onPressed: _busy
+                        ? null
+                        : () => Navigator.pop(context, false),
                     child: const Text('Hủy'),
                   ),
                 ),
@@ -507,7 +551,10 @@ class _FormBodyState extends State<_FormBody> {
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              color: Colors.white,
+                            ),
                           )
                         : Text(widget.submitLabel),
                   ),
@@ -526,9 +573,15 @@ class _PickerSheet extends StatefulWidget {
   final PickerSource source;
   final bool many;
   final List<J> selected;
-
-  const _PickerSheet({required this.source, required this.many, required this.selected});
-
+  final Future<void> Function(List<J>)? onConfirm;
+  final int? maxSelected;
+  const _PickerSheet({
+    required this.source,
+    required this.many,
+    required this.selected,
+    this.onConfirm,
+    this.maxSelected,
+  });
   @override
   State<_PickerSheet> createState() => _PickerSheetState();
 }
@@ -537,76 +590,213 @@ class _PickerSheetState extends State<_PickerSheet> {
   late final Map<Object, J> _sel = {
     for (final s in widget.selected) s['id'] as Object: s,
   };
+  bool _saving = false;
+  String? _error;
+  Future<void> _confirm() async {
+    if (_saving || widget.onConfirm != null && _sel.isEmpty) return;
+    final selection = _sel.values.toList();
+    if (widget.onConfirm == null) {
+      Navigator.pop(context, selection);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onConfirm!(selection);
+      if (mounted) Navigator.pop(context, selection);
+    } catch (e) {
+      if (mounted)
+        setState(() => _error = e is ApiException ? e.message : e.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  void _toggle(J item) {
+    if (_saving) return;
+    final id = item['id'] as Object;
+    if (widget.many &&
+        !_sel.containsKey(id) &&
+        widget.maxSelected != null &&
+        _sel.length >= widget.maxSelected!) {
+      setState(
+        () => _error =
+            'Chỉ chọn tối đa ${widget.maxSelected} người trong một lần.',
+      );
+      return;
+    }
+    setState(() {
+      _error = null;
+      if (widget.many) {
+        _sel.containsKey(id)
+            ? _sel.remove(id)
+            : _sel[id] = {'id': id, 'label': widget.source.label(item)};
+      } else {
+        _sel
+          ..clear()
+          ..[id] = {'id': id, 'label': widget.source.label(item)};
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.8,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 8, 4),
-            child: Row(
-              children: [
-                Expanded(child: Text(widget.source.title, style: theme.textTheme.titleLarge)),
-                if (!widget.many)
-                  TextButton(onPressed: () => Navigator.pop(context, <J>[]), child: const Text('Bỏ chọn')),
-                IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
-              ],
-            ),
-          ),
-          Expanded(
-            child: PagedListView(
-              searchHint: 'Tìm kiếm',
-              fetch: widget.source.fetch,
-              itemBuilder: (ctx, item, _) {
-                final id = item['id'] as Object;
-                final on = _sel.containsKey(id);
-                return Material(
-                  color: on ? theme.colorScheme.primaryContainer : theme.colorScheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(16),
-                  child: ListTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    title: Text(widget.source.label(item)),
-                    subtitle: widget.source.subtitle == null ? null : Text(widget.source.subtitle!(item)),
-                    trailing: Icon(on ? Icons.check_circle_rounded : Icons.circle_outlined,
-                        color: on ? theme.colorScheme.primary : null),
-                    onTap: () => setState(() {
-                      if (widget.many) {
-                        on ? _sel.remove(id) : _sel[id] = {'id': id, 'label': widget.source.label(item)};
-                      } else {
-                        _sel
-                          ..clear()
-                          ..[id] = {'id': id, 'label': widget.source.label(item)};
-                      }
-                    }),
+    return PopScope(
+      canPop: !_saving,
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.8,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.source.title,
+                      style: theme.textTheme.titleLarge,
+                    ),
                   ),
-                );
-              },
+                  if (!widget.many)
+                    TextButton(
+                      onPressed: _saving
+                          ? null
+                          : () => Navigator.pop(context, <J>[]),
+                      child: const Text('Bỏ chọn'),
+                    ),
+                  IconButton(
+                    onPressed: _saving ? null : () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
-            child: FilledButton(
-              onPressed: () => Navigator.pop(context, _sel.values.toList()),
-              child: Text(widget.many ? 'Xác nhận (${_sel.length} đã chọn)' : 'Xác nhận'),
+            if (widget.many && widget.onConfirm != null && _sel.isNotEmpty)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 100),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        for (final item in _sel.values)
+                          InputChip(
+                            label: Text(
+                              item['label']?.toString() ?? '${item['id']}',
+                            ),
+                            onDeleted: _saving
+                                ? null
+                                : () => setState(() {
+                                    _sel.remove(item['id']);
+                                    _error = null;
+                                  }),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: IgnorePointer(
+                ignoring: _saving,
+                child: PagedListView(
+                  searchHint: 'Tìm kiếm',
+                  emptyText: widget.source.emptyText,
+                  fetch: widget.source.fetch,
+                  itemBuilder: (ctx, item, _) {
+                    final on = _sel.containsKey(item['id']);
+                    return Material(
+                      color: on
+                          ? theme.colorScheme.primaryContainer
+                          : theme.colorScheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(16),
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: Text(widget.source.label(item)),
+                        subtitle: widget.source.subtitle == null
+                            ? null
+                            : Text(widget.source.subtitle!(item)),
+                        trailing: Icon(
+                          on
+                              ? Icons.check_circle_rounded
+                              : Icons.circle_outlined,
+                          color: on ? theme.colorScheme.primary : null,
+                        ),
+                        onTap: () => _toggle(item),
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
-          ),
-        ],
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+              child: FilledButton(
+                onPressed: _saving || widget.onConfirm != null && _sel.isEmpty
+                    ? null
+                    : _confirm,
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        widget.many
+                            ? 'Xác nhận (${_sel.length} đã chọn)'
+                            : 'Xác nhận',
+                      ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Mở picker một lựa chọn độc lập (ngoài form).
-/// Trả: null = đóng sheet (giữ nguyên giá trị cũ); [] = "Bỏ chọn"; [ {id,label} ] = đã chọn.
-Future<List<J>?> pickOneFrom(BuildContext context, PickerSource source) {
-  return showModalBottomSheet<List<J>>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    constraints: const BoxConstraints(maxWidth: 680),
-    builder: (ctx) => _PickerSheet(source: source, many: false, selected: const []),
-  );
-}
+Future<List<J>?> pickOneFrom(BuildContext context, PickerSource source) =>
+    showModalBottomSheet<List<J>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 680),
+      builder: (ctx) =>
+          _PickerSheet(source: source, many: false, selected: const []),
+    );
+
+Future<List<J>?> pickManyFrom(
+  BuildContext context,
+  PickerSource source, {
+  List<J> selected = const [],
+  int? maxSelected,
+  Future<void> Function(List<J>)? onConfirm,
+}) => showModalBottomSheet<List<J>>(
+  context: context,
+  isScrollControlled: true,
+  useSafeArea: true,
+  enableDrag: onConfirm == null,
+  constraints: const BoxConstraints(maxWidth: 680),
+  builder: (ctx) => _PickerSheet(
+    source: source,
+    many: true,
+    selected: selected,
+    maxSelected: maxSelected,
+    onConfirm: onConfirm,
+  ),
+);

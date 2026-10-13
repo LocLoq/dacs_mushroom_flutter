@@ -59,3 +59,9 @@ pub-address.txt
 analyze-address.txt
 test-address.txt
 build-address.txt
+
+pub-staff.txt
+analyze-staff.txt
+test-staff.txt
+test-staff-only.txt
+build-staff.txt
