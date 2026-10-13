@@ -28,6 +28,8 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  unifiedpush: ^6.2.0
+  flutter_local_notifications: ^21.0.0
   flutter:
     sdk: flutter
 
@@ -122,3 +124,8 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+dependency_overrides:
+  # Official connector 3.5.0 with AGP 8 Kotlin plugin compatibility only.
+  unifiedpush_android:
+    path: third_party/unifiedpush_android

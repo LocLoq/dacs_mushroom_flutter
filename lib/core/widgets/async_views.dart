@@ -1,3 +1,6 @@
+import 'dart:async';
+import '../services/workflow_refresh_service.dart';
+import '../network/farm_api.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
@@ -7,8 +10,12 @@ class LoadingView extends StatelessWidget {
   const LoadingView({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()));
+  Widget build(BuildContext context) => const Center(
+    child: Padding(
+      padding: EdgeInsets.all(32),
+      child: CircularProgressIndicator(),
+    ),
+  );
 }
 
 class ErrorView extends StatelessWidget {
@@ -32,10 +39,17 @@ class ErrorView extends StatelessWidget {
                 color: AppColors.dangerSoft,
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: const Icon(Icons.cloud_off_rounded, color: AppColors.danger),
+              child: const Icon(
+                Icons.cloud_off_rounded,
+                color: AppColors.danger,
+              ),
             ),
             const SizedBox(height: 14),
-            Text(message, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
             if (onRetry != null) ...[
               const SizedBox(height: 14),
               OutlinedButton.icon(
@@ -66,7 +80,11 @@ class EmptyView extends StatelessWidget {
           children: [
             const MushroomGlyph(size: 64),
             const SizedBox(height: 12),
-            Text(text, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
         ),
       ),
@@ -77,15 +95,25 @@ class EmptyView extends StatelessWidget {
 /// Tải một Future và vẽ loading / lỗi (có Tải lại) / dữ liệu.
 class FutureBody<T> extends StatefulWidget {
   final Future<T> Function() load;
-  final Widget Function(BuildContext, T data, Future<void> Function() reload) builder;
+  final Widget Function(BuildContext, T data, Future<void> Function() reload)
+  builder;
 
-  const FutureBody({super.key, required this.load, required this.builder});
+  final List<String> refreshResources;
+  final Object? refreshId;
+  const FutureBody({
+    super.key,
+    required this.load,
+    required this.builder,
+    this.refreshResources = const [],
+    this.refreshId,
+  });
 
   @override
   State<FutureBody<T>> createState() => FutureBodyState<T>();
 }
 
 class FutureBodyState<T> extends State<FutureBody<T>> {
+  StreamSubscription<RefreshSignal>? _refreshSub;
   T? _data;
   String? _error;
   bool _loading = true;
@@ -94,7 +122,19 @@ class FutureBodyState<T> extends State<FutureBody<T>> {
   @override
   void initState() {
     super.initState();
+    _refreshSub = WorkflowRefreshService.instance.events.listen((signal) {
+      if (signal.matches(widget.refreshResources, widget.refreshId)) {
+        if (signal.reset) _data = null;
+        unawaited(reload());
+      }
+    });
     reload();
+  }
+
+  @override
+  void dispose() {
+    _refreshSub?.cancel();
+    super.dispose();
   }
 
   Future<void> reload() async {
@@ -114,6 +154,9 @@ class FutureBodyState<T> extends State<FutureBody<T>> {
       if (!mounted || my != _ticket) return;
       setState(() {
         _error = e.toString();
+        if (e is ApiException &&
+            (e.isForbidden || e.status == 401 || e.status == 404))
+          _data = null;
         _loading = false;
       });
     }
@@ -122,7 +165,11 @@ class FutureBodyState<T> extends State<FutureBody<T>> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const LoadingView();
-    if (_data == null) return ErrorView(message: _error ?? 'Lỗi không xác định', onRetry: reload);
+    if (_data == null)
+      return ErrorView(
+        message: _error ?? 'Lỗi không xác định',
+        onRetry: reload,
+      );
     return widget.builder(context, _data as T, reload);
   }
 }
@@ -140,9 +187,14 @@ Future<bool> confirmDialog(
       title: Text(title),
       content: Text(message),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Hủy'),
+        ),
         FilledButton(
-          style: danger ? FilledButton.styleFrom(backgroundColor: AppColors.danger) : null,
+          style: danger
+              ? FilledButton.styleFrom(backgroundColor: AppColors.danger)
+              : null,
           onPressed: () => Navigator.pop(ctx, true),
           child: Text(ok),
         ),
@@ -155,8 +207,10 @@ Future<bool> confirmDialog(
 void toast(BuildContext context, String msg, {bool error = false}) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: error ? AppColors.danger : null,
-    ));
+    ..showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: error ? AppColors.danger : null,
+      ),
+    );
 }

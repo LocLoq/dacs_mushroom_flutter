@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/config/app_constants.dart';
+import '../../../core/services/server_connection_service.dart';
+import '../../../core/network/mock_config.dart';
 import '../../../core/localization/app_text_scope.dart';
 import '../../../core/services/app_preferences_service.dart';
 import '../../../core/services/backend_queue_service.dart';
@@ -9,7 +10,8 @@ class FirstRunBackendDialog extends StatefulWidget {
   const FirstRunBackendDialog({super.key});
 
   static Future<void> checkAndShow(BuildContext context) async {
-    final configured = await AppPreferencesService.instance.isBackendConfigured();
+    final configured = await AppPreferencesService.instance
+        .isBackendConfigured();
     if (!configured && context.mounted) {
       await showDialog(
         context: context,
@@ -25,15 +27,23 @@ class FirstRunBackendDialog extends StatefulWidget {
 
 class _FirstRunBackendDialogState extends State<FirstRunBackendDialog> {
   late final TextEditingController _urlCtrl;
+  PushHostMode _mode = PushHostMode.vps;
   bool _connecting = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _urlCtrl = TextEditingController(
-      text: BackendQueueService.instance.backendBaseUrl,
-    );
+    _urlCtrl = TextEditingController(text: '');
+    () async {
+      final mode = await AppPreferencesService.instance.hostMode();
+      final url = await AppPreferencesService.instance.urlForMode(mode);
+      if (mounted)
+        setState(() {
+          _mode = mode;
+          _urlCtrl.text = url;
+        });
+    }();
   }
 
   @override
@@ -50,8 +60,9 @@ class _FirstRunBackendDialogState extends State<FirstRunBackendDialog> {
 
     final rawUrl = _urlCtrl.text.trim();
     try {
-      final normalized = BackendQueueService.normalizeBaseUrl(rawUrl);
-      await AppPreferencesService.instance.saveBackendBaseUrl(normalized);
+      final normalized = validateServerUrl(rawUrl, _mode);
+      await checkServerConnection(normalized);
+      await AppPreferencesService.instance.saveServerProfile(_mode, normalized);
 
       await BackendQueueService.instance.reconnectWithTimeout(
         normalized,
@@ -75,6 +86,9 @@ class _FirstRunBackendDialogState extends State<FirstRunBackendDialog> {
   }
 
   Future<void> _skipOfflineDemo() async {
+    await MockConfig.set(true);
+    await BackendQueueService.instance.disconnect();
+    BackendQueueService.instance.clearSessionJobs();
     await AppPreferencesService.instance.markBackendConfigured();
     if (mounted) {
       Navigator.of(context).pop();
@@ -91,7 +105,11 @@ class _FirstRunBackendDialogState extends State<FirstRunBackendDialog> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              tr(context, vi: 'Thiết Lập Máy Chủ Backend', en: 'Backend Server Setup'),
+              tr(
+                context,
+                vi: 'Thiết Lập Máy Chủ Backend',
+                en: 'Backend Server Setup',
+              ),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
@@ -111,10 +129,30 @@ class _FirstRunBackendDialogState extends State<FirstRunBackendDialog> {
               style: const TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 12),
+            DropdownButtonFormField<PushHostMode>(
+              key: ValueKey(_mode),
+              initialValue: _mode,
+              items: PushHostMode.values
+                  .map((m) => DropdownMenuItem(value: m, child: Text(m.label)))
+                  .toList(),
+              onChanged: _connecting
+                  ? null
+                  : (mode) async {
+                      if (mode == null) return;
+                      final url = await AppPreferencesService.instance
+                          .urlForMode(mode);
+                      if (mounted)
+                        setState(() {
+                          _mode = mode;
+                          _urlCtrl.text = url;
+                        });
+                    },
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: _urlCtrl,
               decoration: const InputDecoration(
-                hintText: AppConstants.kDefaultBackendBaseUrl,
+                hintText: 'https://api.example.com',
                 prefixIcon: Icon(Icons.link),
               ),
             ),
@@ -135,18 +173,13 @@ class _FirstRunBackendDialogState extends State<FirstRunBackendDialog> {
       actions: [
         TextButton(
           onPressed: _connecting ? null : _skipOfflineDemo,
-          child: Text(
-            tr(context, vi: 'Để sau', en: 'Set up later'),
-          ),
+          child: Text(tr(context, vi: 'Dùng thử ngoại tuyến', en: 'Offline demo')),
         ),
         FilledButton(
           onPressed: _connecting ? null : _connect,
-          child: Text(
-            tr(context, vi: 'Lưu & Kết Nối', en: 'Save & Connect'),
-          ),
+          child: Text(tr(context, vi: 'Lưu & Kết Nối', en: 'Save & Connect')),
         ),
       ],
     );
   }
 }
-

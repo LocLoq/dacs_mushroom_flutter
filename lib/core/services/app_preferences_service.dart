@@ -1,5 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../app/config/app_constants.dart';
+import 'server_connection_service.dart';
 import '../localization/app_language.dart';
 import '../models/app_config.dart';
 import '../network/api_config.dart';
@@ -47,6 +48,30 @@ class AppPreferencesService {
       config.serverOrigin.toString(),
     );
     ApiConfig.useServer(config.serverOrigin.toString());
+  }
+
+  Future<PushHostMode> hostMode() async {
+    await init();
+    final value = _prefs!.getString('push_host_mode');
+    return PushHostMode.values.where((m) => m.name == value).firstOrNull ??
+        PushHostMode.infer(
+          _prefs!.getString(AppConstants.prefBackendBaseUrl) ?? '',
+        );
+  }
+
+  Future<String> urlForMode(PushHostMode mode) async {
+    await init();
+    final saved = _prefs!.getString('backend_url_' + mode.name);
+    if (saved != null) return saved;
+    final legacy = _prefs!.getString(AppConstants.prefBackendBaseUrl);
+    return legacy != null && PushHostMode.infer(legacy) == mode ? legacy : '';
+  }
+
+  Future<void> saveServerProfile(PushHostMode mode, String value) async {
+    final origin = validateServerUrl(value, mode);
+    await saveBackendBaseUrl(origin);
+    await _prefs!.setString('push_host_mode', mode.name);
+    await _prefs!.setString('backend_url_' + mode.name, origin);
   }
 
   Future<void> saveDarkMode(bool enabled) async {

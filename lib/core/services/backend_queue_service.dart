@@ -1,3 +1,4 @@
+import 'workflow_refresh_service.dart';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -52,6 +53,11 @@ class BackendQueueService {
   final _jobs = <String, QueueJob>{};
   final _events = StreamController<QueueEvent>.broadcast();
   io.Socket? _socket;
+  Timer? _pollTimer;
+  final Map<String, Timer> _refreshTimers = {};
+  final Map<String, Future<void>> _fetching = {};
+  final Set<String> _refetchRequested = {};
+  StreamSubscription<RefreshSignal>? _refreshSub;
   bool get isWebSocketConnected => _socket?.connected ?? false;
   String get backendBaseUrl => _backendBaseUrl;
   Stream<QueueEvent> get events => _events.stream;
@@ -66,6 +72,11 @@ class BackendQueueService {
     _socket?.dispose();
     _socket = null;
     _connectionRevision++;
+    _pollTimer?.cancel();
+    for (final timer in _refreshTimers.values) {
+      timer.cancel();
+    }
+    _refreshTimers.clear();
     _jobs.clear();
     _restoreFuture = null;
     _uploadRetryAt = null;
@@ -90,30 +101,50 @@ class BackendQueueService {
       _backendBaseUrl,
       io.OptionBuilder()
           .setTransports(['websocket'])
+            .setExtraHeaders({'Accept': 'application/json', 'X-Tunnel-Skip-AntiPhishing-Page': 'true'})
           .enableForceNew()
           .enableReconnection()
           .disableAutoConnect()
           .build(),
     );
     _socket = socket;
-    socket.onConnect((_) {
-      _emit('ws.connected', {'url': _backendBaseUrl});
-      for (final job in _jobs.values.where((job) => job.status.isPending)) {
-        socket.emit('subscribe_job', job.jobId);
+    _refreshSub ??= WorkflowRefreshService.instance.events.listen((signal) {
+      if (signal.resource == '*') {
+        for (final job
+            in _jobs.values.where((job) => job.status.isPending).toList()) {
+          unawaited(fetchJob(job.jobId));
+        }
       }
     });
-    socket.onDisconnect(
-      (_) => _emit('ws.closed', {'reason': 'Connection closed'}),
-    );
+    socket.onConnect((_) {
+      _emit('ws.connected', {'url': _backendBaseUrl});
+      _updatePolling();
+      for (final job in _jobs.values.where((job) => job.status.isPending)) {
+        socket.emit('subscribe_job', job.jobId);
+        unawaited(fetchJob(job.jobId));
+      }
+    });
+    socket.onDisconnect((_) {
+      _emit('ws.closed', {'reason': 'Connection closed'});
+      _updatePolling();
+    });
     socket.onConnectError(
       (_) => _emit('ws.error', {
         'message': 'Không kết nối được máy chủ. Đang thử lại.',
       }),
     );
-    for (final event in ['processing', 'retrying', 'finished', 'failed']) {
-      socket.on(event, (payload) => _handleEvent(event, payload));
-    }
+    socket.on('refresh', (payload) {
+      if (payload is! Map || payload['resource'] != 'classifier-job') return;
+      final id = payload['id']?.toString();
+      if (id == null || !_jobs.containsKey(id)) return;
+      _refreshTimers.remove(id)?.cancel();
+      _refreshTimers[id] = Timer(const Duration(milliseconds: 300), () {
+        _refreshTimers.remove(id);
+        unawaited(fetchJob(id));
+      });
+    });
     socket.connect();
+    _updatePolling();
   }
 
   Future<void> reconnect(String baseUrl) async {
@@ -143,6 +174,13 @@ class BackendQueueService {
 
   Future<void> disconnect() async {
     _connectionRevision++;
+    _pollTimer?.cancel();
+    for (final timer in _refreshTimers.values) {
+      timer.cancel();
+    }
+    _refreshTimers.clear();
+    _refreshSub?.cancel();
+    _refreshSub = null;
     _socket?.dispose();
     _socket = null;
     _emit('ws.closed', {'reason': 'Manual disconnect'});
@@ -329,6 +367,7 @@ class BackendQueueService {
     _jobs[jobId] = job;
     await _persistJobs();
     _emit('job.status', {'job_id': jobId, 'status': job.status.name});
+    _updatePolling();
     try {
       if (isWebSocketConnected) {
         _socket!.emit('subscribe_job', jobId);
@@ -350,9 +389,71 @@ class BackendQueueService {
     _emit('session.reset', {});
   }
 
-  Future<void> fetchJob(String jobId) async {
-    await connect();
-    if (isWebSocketConnected) _socket?.emit('subscribe_job', jobId);
+  void _updatePolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    if (!isWebSocketConnected &&
+        _jobs.values.any((job) => job.status.isPending) &&
+        !_events.isClosed) {
+      _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+        for (final job
+            in _jobs.values.where((job) => job.status.isPending).toList()) {
+          unawaited(fetchJob(job.jobId));
+        }
+      });
+    }
+  }
+
+  Future<void> fetchJob(String jobId) {
+    if (!_jobs.containsKey(jobId) || !_jobs[jobId]!.status.isPending)
+      return Future.value();
+    final revision = _connectionRevision;
+    final key = '$revision:$jobId';
+    final pending = _fetching[key];
+    if (pending != null) {
+      _refetchRequested.add(key);
+      return pending;
+    }
+    final future = _fetchJobApi(jobId).whenComplete(() {
+      _fetching.remove(key);
+      if (_refetchRequested.remove(key) &&
+          revision == _connectionRevision &&
+          !_events.isClosed) {
+        unawaited(fetchJob(jobId));
+      }
+    });
+    _fetching[key] = future;
+    return future;
+  }
+
+  Future<void> _fetchJobApi(String jobId) async {
+    final revision = _connectionRevision;
+    try {
+      final response = await _api.request(
+        '/mushroom-classifier/jobs/$jobId',
+        baseUrl: _backendBaseUrl,
+        auth: RequestAuth.none,
+      );
+      if (revision != _connectionRevision ||
+          _events.isClosed ||
+          !_jobs.containsKey(jobId))
+        return;
+      final raw = response['data'];
+      if (raw is! Map || raw['status'] is! String) return;
+      final data = Map<String, dynamic>.from(raw)..['jobId'] = jobId;
+      _handleEvent(
+        data['status'] == 'QUEUED' && data['nextRetryAt'] != null
+            ? 'retrying'
+            : 'snapshot',
+        data,
+      );
+      _updatePolling();
+    } catch (_) {
+      _emit('job.refresh_error', {
+        'job_id': jobId,
+        'message': 'Chưa tải được trạng thái nhận diện. Sẽ thử lại.',
+      });
+    }
   }
 
   static Map<String, dynamic> adaptResult(Map<String, dynamic> raw) {
@@ -472,6 +573,13 @@ class BackendQueueService {
 
   void dispose() {
     _connectionRevision++;
+    _pollTimer?.cancel();
+    for (final timer in _refreshTimers.values) {
+      timer.cancel();
+    }
+    _refreshTimers.clear();
+    _refreshSub?.cancel();
+    _refreshSub = null;
     _socket?.dispose();
     _socket = null;
     unawaited(_events.close());

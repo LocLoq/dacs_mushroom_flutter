@@ -1,3 +1,4 @@
+import '../../notifications/notification_screen.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme/app_colors.dart';
@@ -263,6 +264,7 @@ class _ManageHubScreenState extends State<ManageHubScreen> {
 
   List<Widget> _signedIn(BuildContext context) {
     return [
+      const Align(alignment: Alignment.centerRight, child: NotificationBell()),
       FilledButton.icon(
         onPressed: () => scanBatchForUpdate(context),
         icon: const Icon(Icons.qr_code_scanner_rounded),

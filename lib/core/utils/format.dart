@@ -140,7 +140,11 @@ const classifierEdibilityLabels = {
   'UNKNOWN': 'Chưa xác định',
 };
 
-const roleLabels = {'admin': 'Quản trị viên', 'manager': 'Quản lý', 'staff': 'Nhân viên'};
+const roleLabels = {
+  'admin': 'Quản trị viên',
+  'manager': 'Quản lý',
+  'staff': 'Nhân viên',
+};
 
 const evidenceTypeLabels = {
   'CARE_LOG': 'Chăm sóc',
@@ -155,7 +159,15 @@ String label(Map<String, String> map, String? code) {
 }
 
 /// Giá trị cũ "WATERING" của care log được dịch, còn lại là chuỗi tự do.
-String careActionLabel(String a) => a == 'WATERING' ? 'Tưới nước' : a;
+String careActionLabel(String a) =>
+    const {
+      'WATERING': 'Tưới nước',
+      'FERTILIZING': 'Bón bổ sung',
+      'CLEANING': 'Vệ sinh',
+      'VENTILATION': 'Thông gió',
+      'PEST_CONTROL': 'Kiểm tra sâu bệnh',
+    }[a] ??
+    a;
 
 Color statusColor(String? code) {
   switch (code) {

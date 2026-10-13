@@ -22,6 +22,7 @@ class TokenStore {
 enum SessionStatus { guest, pending, passwordChangeRequired, signedIn }
 
 class LocalSession {
+  static final beforeLogout = <Future<void> Function()>[];
   static final changes = ValueNotifier<int>(0);
   static final store = TokenStore();
   static String? _token, _serverOrigin;
@@ -92,6 +93,11 @@ class LocalSession {
   }
 
   static Future<void> logout() async {
+    for (final hook in beforeLogout) {
+      try {
+        await hook();
+      } catch (_) {}
+    }
     clear();
     await store.clear();
     await (await SharedPreferences.getInstance()).remove('farm_mock_token');

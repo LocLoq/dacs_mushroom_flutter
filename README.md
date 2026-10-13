@@ -74,3 +74,10 @@ adb -s emulator-5554 shell pm grant com.example.thu android.permission.CAMERA
 ~~~
 
 This test starts the native camera and decodes the actual PNG exported by the QR dialog, including Unicode and URL-special characters. It does not call business APIs. The integration test replaces the debug APK entrypoint; rebuild/install the normal debug APK with check_frontend.ps1 -Task android afterward.
+
+
+## Phân quyền lô, ảnh chăm sóc và thông báo
+
+Xem [STAFF_WORKFLOW.md](STAFF_WORKFLOW.md) để cấu hình backend, UnifiedPush/ntfy cho Android, APNs trực tiếp cho iOS và giao thức refresh mới. Staff cần được admin thêm vào cơ sở và phân công từng lô trước khi thao tác. Push mặc định tắt cho tới khi có cấu hình ntfy/APNs.
+
+Ba chế độ VPS / Mạng nội bộ / VS Code tunnel, đăng ký distributor và tài khoản ntfy: xem [PUSH_HOSTING.md](PUSH_HOSTING.md).

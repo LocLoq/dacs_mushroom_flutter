@@ -54,9 +54,17 @@ class _EvidenceSheetState extends State<EvidenceSheet> {
   }
 
   void _autoSelect(String type, J? created) {
-    final id = created?.i('id'); // dùng record server trả về, không đoán từ thứ tự list
+    final id = created?.i(
+      'id',
+    ); // dùng record server trả về, không đoán từ thứ tự list
     if (id == null) return;
-    setState(() => _sel[_k(type, id)] = {'type': type, 'recordId': id, 'record': created});
+    setState(
+      () => _sel[_k(type, id)] = {
+        'type': type,
+        'recordId': id,
+        'record': created,
+      },
+    );
     _listKey.currentState?.load();
   }
 
@@ -64,12 +72,15 @@ class _EvidenceSheetState extends State<EvidenceSheet> {
     final bid = await _ensureBatch();
     if (bid == null || !mounted) return;
     J? created;
-    await showFormSheet(
-      context,
-      title: 'Ghi chăm sóc',
-      fields: careFields(),
-      initial: {'recordedAt': DateTime.now()},
-      onSubmit: (b) async => created = (await _api.post('/cultivation-batches/$bid/care-logs', b)).m('data'),
+    await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 680),
+      builder: (_) => CareForm(
+        path: '/cultivation-batches/$bid/care-logs',
+        onCreated: (record) => created = record,
+      ),
     );
     _autoSelect('CARE_LOG', created);
   }
@@ -83,7 +94,10 @@ class _EvidenceSheetState extends State<EvidenceSheet> {
       title: 'Ghi thu hoạch',
       fields: harvestFields(),
       initial: {'harvestedAt': DateTime.now(), 'finalizeBatch': false},
-      onSubmit: (b) async => created = (await _api.post('/cultivation-batches/$bid/harvests', b)).m('data'),
+      onSubmit: (b) async => created = (await _api.post(
+        '/cultivation-batches/$bid/harvests',
+        b,
+      )).m('data'),
     );
     _autoSelect('HARVEST', created);
   }
@@ -97,7 +111,10 @@ class _EvidenceSheetState extends State<EvidenceSheet> {
       isScrollControlled: true,
       useSafeArea: true,
       constraints: const BoxConstraints(maxWidth: 680),
-      builder: (_) => GrowthForm(path: '/cultivation-batches/$bid/growth-progress', onCreated: (r) => created = r),
+      builder: (_) => GrowthForm(
+        path: '/cultivation-batches/$bid/growth-progress',
+        onCreated: (r) => created = r,
+      ),
     );
     _autoSelect('GROWTH_PROGRESS', created);
   }
@@ -105,9 +122,12 @@ class _EvidenceSheetState extends State<EvidenceSheet> {
   Future<void> _submit() async {
     if (_busy) return; // chống nhấn đôi
     final notes = _notes.text.trim();
-    if (_sel.isEmpty) return setState(() => _error = 'Chọn ít nhất 1 minh chứng.');
-    if (_sel.length > 20) return setState(() => _error = 'Tối đa 20 minh chứng.');
-    if (notes.length > 10000) return setState(() => _error = 'Ghi chú tối đa 10.000 ký tự.');
+    if (_sel.isEmpty)
+      return setState(() => _error = 'Chọn ít nhất 1 minh chứng.');
+    if (_sel.length > 20)
+      return setState(() => _error = 'Tối đa 20 minh chứng.');
+    if (notes.length > 10000)
+      return setState(() => _error = 'Ghi chú tối đa 10.000 ký tự.');
     setState(() {
       _busy = true;
       _error = null;
@@ -115,14 +135,21 @@ class _EvidenceSheetState extends State<EvidenceSheet> {
     try {
       // Chỉ gửi type + recordId, không gửi record/snapshot/ảnh.
       await _api.post('$_taskPath/submissions', {
-        'evidence': [for (final c in _sel.values) {'type': c['type'], 'recordId': c['recordId']}],
+        'evidence': [
+          for (final c in _sel.values)
+            {'type': c['type'], 'recordId': c['recordId']},
+        ],
         if (notes.isNotEmpty) 'notes': notes,
       });
       if (mounted) Navigator.pop(context, true);
     } on ApiException catch (e) {
       if (!mounted) return;
       if (e.isConflict) {
-        toast(context, 'Trạng thái công việc đã thay đổi. Đã tải lại.', error: true);
+        toast(
+          context,
+          'Trạng thái công việc đã thay đổi. Đã tải lại.',
+          error: true,
+        );
         Navigator.pop(context, true); // màn cha tải lại, không tự gửi lại
       } else {
         setState(() => _error = e.message); // giữ lựa chọn
@@ -152,106 +179,203 @@ class _EvidenceSheetState extends State<EvidenceSheet> {
     final theme = Theme.of(context);
     final filters = <String?, String>{null: 'Tất cả', ...evidenceTypeLabels};
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.92,
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 8, 0),
-            child: Row(children: [
-              Expanded(child: Text('Gửi minh chứng', style: theme.textTheme.titleLarge)),
-              IconButton(onPressed: _busy ? null : () => Navigator.pop(context, false), icon: const Icon(Icons.close_rounded)),
-            ]),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Wrap(spacing: 8, runSpacing: 4, children: [
-              ActionChip(avatar: const Icon(Icons.water_drop_outlined, size: 16), label: const Text('Ghi chăm sóc'), onPressed: _recordCare),
-              ActionChip(avatar: const Icon(Icons.eco_outlined, size: 16), label: const Text('Ghi sinh trưởng'), onPressed: _recordGrowth),
-              ActionChip(avatar: const Icon(Icons.scale_outlined, size: 16), label: const Text('Ghi thu hoạch'), onPressed: _recordHarvest),
-            ]),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(children: [
-                for (final e in filters.entries)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(label: Text(e.value), selected: _type == e.key, onSelected: (_) => setState(() => _type = e.key)),
-                  ),
-              ]),
-            ),
-          ),
-          Expanded(
-            child: PagedListView(
-              key: _listKey,
-              deps: [_type],
-              emptyText: 'Chưa có hành động nào của bạn để chọn. Dùng các nút ghi ở trên.',
-              fetch: (p, s) async => PageData.from(await _api.get('$_taskPath/evidence-candidates',
-                  query: {'page': p, 'limit': 10, 'type': _type})),
-              itemBuilder: (ctx, c, _) {
-                final type = c.s('type');
-                final r = c.m('record') ?? {};
-                final key = _k(type, c.i('recordId'));
-                final on = _sel.containsKey(key);
-                return SoftCard(
-                  color: on ? theme.colorScheme.primaryContainer : null,
-                  padding: const EdgeInsets.all(12),
-                  onTap: () => setState(() {
-                    if (on) {
-                      _sel.remove(key);
-                    } else if (_sel.length < 20) {
-                      _sel[key] = c;
-                    } else {
-                      _error = 'Tối đa 20 minh chứng.';
-                    }
-                  }),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Icon(on ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                        color: on ? theme.colorScheme.primary : null),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(label(evidenceTypeLabels, type), style: theme.textTheme.labelMedium),
-                        Text(_summary(type, r), maxLines: 3, overflow: TextOverflow.ellipsis),
-                        Text('${fmtDateTime(_time(type, r))}${r.i('batchId') == null ? '' : ' · Lô #${r.i('batchId')}'}',
-                            style: theme.textTheme.bodySmall),
-                        if (r.l('images').isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Wrap(spacing: 6, children: [for (final i in r.l('images')) NetImage(i.sn('imageUrl'), width: 44, height: 44, zoomable: false)]),
-                        ],
-                      ]),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 8, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Gửi minh chứng',
+                      style: theme.textTheme.titleLarge,
                     ),
-                  ]),
-                );
-              },
+                  ),
+                  IconButton(
+                    onPressed: _busy
+                        ? null
+                        : () => Navigator.pop(context, false),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(_error!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  ActionChip(
+                    avatar: const Icon(Icons.water_drop_outlined, size: 16),
+                    label: const Text('Ghi chăm sóc'),
+                    onPressed: _recordCare,
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.eco_outlined, size: 16),
+                    label: const Text('Ghi sinh trưởng'),
+                    onPressed: _recordGrowth,
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.scale_outlined, size: 16),
+                    label: const Text('Ghi thu hoạch'),
+                    onPressed: _recordHarvest,
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final e in filters.entries)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(e.value),
+                          selected: _type == e.key,
+                          onSelected: (_) => setState(() => _type = e.key),
+                        ),
+                      ),
+                  ],
                 ),
-              TextField(
-                controller: _notes,
-                maxLines: 2,
-                decoration: const InputDecoration(labelText: 'Ghi chú (tuỳ chọn)'),
               ),
-              const SizedBox(height: 10),
-              FilledButton(
-                onPressed: _busy ? null : _submit,
-                child: _busy
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
-                    : Text('Gửi minh chứng (${_sel.length}/20)'),
+            ),
+            Expanded(
+              child: PagedListView(
+                key: _listKey,
+                refreshResources: const [
+                  'care-logs',
+                  'growth-progress',
+                  'harvests',
+                ],
+                refreshId: widget.task.i('batchId'),
+                deps: [_type],
+                emptyText:
+                    'Chưa có hành động nào của bạn để chọn. Dùng các nút ghi ở trên.',
+                fetch: (p, s) async => PageData.from(
+                  await _api.get(
+                    '$_taskPath/evidence-candidates',
+                    query: {'page': p, 'limit': 10, 'type': _type},
+                  ),
+                ),
+                itemBuilder: (ctx, c, _) {
+                  final type = c.s('type');
+                  final r = c.m('record') ?? {};
+                  final key = _k(type, c.i('recordId'));
+                  final on = _sel.containsKey(key);
+                  return SoftCard(
+                    color: on ? theme.colorScheme.primaryContainer : null,
+                    padding: const EdgeInsets.all(12),
+                    onTap: () => setState(() {
+                      if (on) {
+                        _sel.remove(key);
+                      } else if (_sel.length < 20) {
+                        _sel[key] = c;
+                      } else {
+                        _error = 'Tối đa 20 minh chứng.';
+                      }
+                    }),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          on
+                              ? Icons.check_box_rounded
+                              : Icons.check_box_outline_blank_rounded,
+                          color: on ? theme.colorScheme.primary : null,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                label(evidenceTypeLabels, type),
+                                style: theme.textTheme.labelMedium,
+                              ),
+                              Text(
+                                _summary(type, r),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '${fmtDateTime(_time(type, r))}${r.i('batchId') == null ? '' : ' · Lô #${r.i('batchId')}'}',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              if (r.l('images').isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  children: [
+                                    for (final i in r.l('images'))
+                                      NetImage(
+                                        i.sn('imageUrl'),
+                                        width: 44,
+                                        height: 44,
+                                        zoomable: false,
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
-            ]),
-          ),
-        ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(
+                          color: AppColors.danger,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  TextField(
+                    controller: _notes,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Ghi chú (tuỳ chọn)',
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton(
+                    onPressed: _busy ? null : _submit,
+                    child: _busy
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text('Gửi minh chứng (${_sel.length}/20)'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

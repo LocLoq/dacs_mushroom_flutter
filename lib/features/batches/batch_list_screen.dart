@@ -150,6 +150,7 @@ class _BatchListScreenState extends State<BatchListScreen> {
           : null,
       body: PagedListView(
         key: _key,
+        refreshResources: const ['batches'],
         searchHint: 'Tìm theo mã lô',
         emptyText: 'Chưa có lô nào khớp bộ lọc.',
         deps: [_status, _facility?['id'], _species?['id']],

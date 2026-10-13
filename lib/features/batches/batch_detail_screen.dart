@@ -1,3 +1,4 @@
+import '../staff/staff_assignment_screen.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/network/farm_api.dart';
@@ -80,7 +81,17 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
     final ok = await showFormSheet(
       context,
       title: 'Sửa lô',
-      fields: batchFields(isEdit: true),
+      fields: LocalSession.canManage
+          ? batchFields(isEdit: true)
+          : const [
+              FieldDef(
+                'status',
+                'Trạng thái',
+                FieldType.choice,
+                required: true,
+                options: batchStatusLabels,
+              ),
+            ],
       initial: d,
       initialPicks: {
         'facilityId': [
@@ -145,6 +156,8 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
       ),
       body: FutureBody<J>(
         key: _bodyKey,
+        refreshResources: const ['batches', 'harvests'],
+        refreshId: widget.batchId,
         load: _load,
         builder: (ctx, d, reload) {
           final theme = Theme.of(ctx);
@@ -174,8 +187,25 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
                     ),
                     onPressed: () => _edit(d),
                     icon: const Icon(Icons.edit_outlined, size: 18),
-                    label: const Text('Sửa lô'),
+                    label: Text(
+                      LocalSession.canManage ? 'Sửa lô' : 'Đổi trạng thái',
+                    ),
                   ),
+                  if (LocalSession.isAdmin)
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => StaffAssignmentScreen(
+                            path:
+                                '/cultivation-batches/${widget.batchId}/staff',
+                            title: 'Nhân viên phụ trách lô',
+                            facilityId: d.i('facilityId'),
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(Icons.group_outlined),
+                      label: const Text('Nhân viên'),
+                    ),
                   if (canManage)
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(

@@ -1,3 +1,5 @@
+import '../core/services/workflow_refresh_service.dart';
+import '../core/services/push_notification_service.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -29,6 +31,8 @@ class _MushroomAppState extends State<MushroomApp> {
   @override
   void initState() {
     super.initState();
+    WorkflowRefreshService.instance.start();
+    unawaited(PushNotificationService.instance.start(_navigatorKey));
     LocalSession.changes.addListener(_sessionChanged);
     _bootstrap();
   }
@@ -47,6 +51,8 @@ class _MushroomAppState extends State<MushroomApp> {
 
   @override
   void dispose() {
+    WorkflowRefreshService.instance.stop();
+    PushNotificationService.instance.stop();
     LocalSession.changes.removeListener(_sessionChanged);
     super.dispose();
   }

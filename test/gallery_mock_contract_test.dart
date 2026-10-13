@@ -102,6 +102,8 @@ void main() {
     final id = (created['data'] as Map)['id'];
     final code = (created['data'] as Map)['batchCode'] as String;
     expect(code, startsWith('LO-CS1-2026-'));
+    await api.login('admin', 'admin123');
+    await api.post('/cultivation-batches/$id/staff', {'userId': 3});
     await api.login('staff', 'staff123');
     expect(
       (await api.get(

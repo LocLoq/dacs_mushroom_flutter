@@ -67,6 +67,8 @@ class ApiClient {
     required String serverOrigin,
     bool binary = false,
   }) async {
+    request.headers['Accept'] = 'application/json';
+    if (request.url.host.endsWith('.devtunnels.ms')) request.headers['X-Tunnel-Skip-AntiPhishing-Page'] = 'true';
     request.headers.remove('Authorization');
     final bearer = token ?? LocalSession.tokenFor(serverOrigin);
     if (auth != RequestAuth.none && bearer != null) {

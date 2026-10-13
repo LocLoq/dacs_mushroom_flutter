@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+analyze-push-final.txt
+test-push-final.txt
+pub-push-final.txt
+build-push-final.txt

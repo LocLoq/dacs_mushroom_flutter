@@ -1,3 +1,4 @@
+import '../../core/storage/local_session.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -71,6 +72,8 @@ class _ProgressTabState extends State<ProgressTab> {
         const SizedBox(height: 10),
         FutureBody<List<J>>(
           key: _key,
+          refreshResources: const ['growth-progress'],
+          refreshId: widget.batchId,
           load: _load,
           builder: (ctx, items, _) {
             if (items.isEmpty)
@@ -100,11 +103,16 @@ class _ProgressTabState extends State<ProgressTab> {
                                 fmtDateTime(r.sn('recordedAt')),
                                 style: theme.textTheme.bodySmall,
                               ),
-                              IconButton(
-                                visualDensity: VisualDensity.compact,
-                                onPressed: () => _openForm(record: r),
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                              ),
+                              if (LocalSession.canManage ||
+                                  r.i('createdByUserId') == LocalSession.userId)
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => _openForm(record: r),
+                                  icon: const Icon(
+                                    Icons.edit_outlined,
+                                    size: 18,
+                                  ),
+                                ),
                             ],
                           ),
                           Text(r.s('notes')),

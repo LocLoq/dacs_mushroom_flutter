@@ -104,6 +104,13 @@ void main() {
       final socket = TestSocket(autoConnect: false);
       var uploads = 0;
       final client = MockClient((request) async {
+        if (request.method == 'GET')
+          return http.Response(
+            jsonEncode({
+              'data': {'status': 'QUEUED'},
+            }),
+            200,
+          );
         uploads++;
         expect(request.method, 'POST');
         expect(request.url.path, '/api/mushroom-classifier/classify');
@@ -128,77 +135,91 @@ void main() {
   );
 
   test(
-    'processing status and retrying are distinct; reconnect subscribes pending IDs',
+    'refresh reads status from the API, debounces duplicates and reconnects',
     () async {
       final socket = TestSocket();
-      var uploads = 0;
+      var reads = 0;
+      var state = <String, dynamic>{'status': 'QUEUED'};
       final queue = service(
         socket,
-        MockClient((_) async {
-          uploads++;
-          return accepted();
+        MockClient((request) async {
+          if (request.method == 'POST') return accepted();
+          reads++;
+          expect(request.url.path, '/api/mushroom-classifier/jobs/job-1');
+          return http.Response(jsonEncode({'data': state}), 200);
         }),
       );
       await queue.enqueue(frame());
-      socket.receive('processing', {'jobId': 'job-1', 'status': 'QUEUED'});
-      expect(queue.jobs.single.status, JobStatus.queued);
-      socket.receive('processing', {'jobId': 'job-1', 'status': 'PROCESSING'});
+      await flush();
+      state = {'status': 'PROCESSING'};
+      for (var i = 0; i < 3; i++) {
+        socket.receive('refresh', {
+          'resource': 'classifier-job',
+          'id': 'job-1',
+        });
+      }
+      final before = reads;
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      expect(reads, before + 1);
       expect(queue.jobs.single.status, JobStatus.processing);
-      socket.receive('retrying', {
-        'jobId': 'job-1',
+      state = {
         'status': 'QUEUED',
-        'message': 'Temporary error',
-      });
+        'nextRetryAt': DateTime.now()
+            .add(const Duration(seconds: 5))
+            .toIso8601String(),
+      };
+      await queue.fetchJob('job-1');
       expect(queue.jobs.single.status, JobStatus.retrying);
-      expect(queue.jobs.single.error, isNull);
       socket.subscriptions.clear();
       socket.serverDisconnect();
-      expect(queue.jobs.single.jobId, 'job-1');
       socket.serverConnect();
-      expect(socket.subscriptions, ['job-1']);
       await flush();
-      expect(
-        (await RecognitionQueueStore().load(
-          queue.backendBaseUrl,
-        )).single.status,
-        JobStatus.retrying,
-      );
-      expect(uploads, 1);
+      expect(socket.subscriptions, ['job-1']);
+      expect(queue.jobs.single.status, JobStatus.retrying);
     },
   );
 
-  for (final event in ['finished', 'failed']) {
+  for (final status in ['SUCCEEDED', 'FAILED']) {
     test(
-      '$event finalizes a retrying job and removes it from pending storage',
+      '$status snapshot finalizes the job and cannot regress from delayed refresh',
       () async {
         final socket = TestSocket();
-        final queue = service(socket, MockClient((_) async => accepted()));
+        var state = <String, dynamic>{'status': 'QUEUED'};
+        final queue = service(
+          socket,
+          MockClient(
+            (request) async => request.method == 'POST'
+                ? accepted()
+                : http.Response(jsonEncode({'data': state}), 200),
+          ),
+        );
         await queue.enqueue(frame());
-        socket.receive('retrying', {'jobId': 'job-1'});
+        await flush();
         final resultEvent = queue.events.firstWhere(
           (event) => event.event == 'job.result',
         );
-        socket.receive(event, {
-          'jobId': 'job-1',
-          if (event == 'finished')
+        state = {
+          'status': status,
+          if (status == 'SUCCEEDED')
             'result': {'name': 'Mushroom', 'confidence': 0.9},
-          if (event == 'failed') 'message': 'Retries exhausted',
+          if (status == 'FAILED') 'message': 'Retries exhausted',
+        };
+        socket.receive('refresh', {
+          'resource': 'classifier-job',
+          'id': 'job-1',
         });
         expect(
           (await resultEvent).data['status'],
-          event == 'finished' ? 'completed' : 'failed',
+          status == 'SUCCEEDED' ? 'completed' : 'failed',
         );
         expect(queue.jobs.single.status.isPending, isFalse);
-        if (event == 'finished') {
-          expect(queue.jobs.single.result?['mushroom_name'], 'Mushroom');
-        } else {
-          expect(queue.jobs.single.error, 'Retries exhausted');
-        }
-        socket.receive('processing', {'jobId': 'job-1', 'status': 'QUEUED'});
+        expect(
+          queue.jobs.single.result?['mushroom_name'],
+          status == 'SUCCEEDED' ? 'Mushroom' : null,
+        );
+        state = {'status': 'PROCESSING'};
+        await queue.fetchJob('job-1');
         expect(queue.jobs.single.status.isPending, isFalse);
-        socket.subscriptions.clear();
-        socket.serverConnect();
-        expect(socket.subscriptions, isEmpty);
         await flush();
         expect(
           await RecognitionQueueStore().load(queue.backendBaseUrl),
@@ -207,6 +228,77 @@ void main() {
       },
     );
   }
+
+  test(
+    'a disconnected socket polls the pending job API after five seconds',
+    () async {
+      final socket = TestSocket(autoConnect: false);
+      var reads = 0;
+      final queue = service(
+        socket,
+        MockClient((request) async {
+          if (request.method == 'POST') return accepted();
+          reads++;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'status': 'SUCCEEDED',
+                'result': {'name': 'Mushroom'},
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      await queue.enqueue(frame());
+      await Future<void>.delayed(const Duration(milliseconds: 5100));
+      expect(reads, 1);
+      expect(queue.jobs.single.status, JobStatus.completed);
+    },
+  );
+
+  test(
+    'refresh arriving during a snapshot read triggers another API read',
+    () async {
+      final socket = TestSocket();
+      final firstRead = Completer<http.Response>();
+      var reads = 0;
+      final queue = service(
+        socket,
+        MockClient((request) async {
+          if (request.method == 'POST') return accepted();
+          if (++reads == 1) return firstRead.future;
+          return http.Response(
+            jsonEncode({
+              'data': {
+                'status': 'SUCCEEDED',
+                'result': {'name': 'Latest result'},
+              },
+            }),
+            200,
+          );
+        }),
+      );
+      await queue.enqueue(frame());
+      await flush();
+      final resultEvent = queue.events.firstWhere(
+        (event) => event.event == 'job.result',
+      );
+      socket.receive('refresh', {'resource': 'classifier-job', 'id': 'job-1'});
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      firstRead.complete(
+        http.Response(
+          jsonEncode({
+            'data': {'status': 'PROCESSING'},
+          }),
+          200,
+        ),
+      );
+      expect((await resultEvent).data['status'], 'completed');
+      expect(reads, 2);
+      expect(queue.jobs.single.result?['mushroom_name'], 'Latest result');
+    },
+  );
 
   test(
     'pending IDs are isolated by backend and available when switching back',

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/network/api_config.dart';
-import '../../../core/network/farm_api.dart';
-import '../../../core/network/api_client.dart' as live;
+import '../../../core/services/app_preferences_service.dart';
+import '../../../core/services/server_connection_service.dart';
+import 'push_settings_card.dart';
 import '../../../core/network/mock_config.dart';
 import '../../../core/services/backend_queue_service.dart';
 import '../../../core/widgets/soft_card.dart';
@@ -15,6 +16,31 @@ class FarmApiSettingsCard extends StatefulWidget {
 
 class _FarmApiSettingsCardState extends State<FarmApiSettingsCard> {
   late final _ctrl = TextEditingController(text: ApiConfig.baseUrl);
+  PushHostMode _mode = PushHostMode.vps;
+  @override
+  void initState() {
+    super.initState();
+    () async {
+      final mode = await AppPreferencesService.instance.hostMode();
+      final url = await AppPreferencesService.instance.urlForMode(mode);
+      if (mounted)
+        setState(() {
+          _mode = mode;
+          _ctrl.text = url;
+        });
+    }();
+  }
+
+  Future<void> _modeChanged(PushHostMode? mode) async {
+    if (mode == null) return;
+    final url = await AppPreferencesService.instance.urlForMode(mode);
+    if (mounted)
+      setState(() {
+        _mode = mode;
+        _ctrl.text = url;
+      });
+  }
+
   bool _busy = false, _ok = false;
   String? _message;
   @override
@@ -29,18 +55,10 @@ class _FarmApiSettingsCardState extends State<FarmApiSettingsCard> {
       _message = null;
     });
     try {
-      await ApiConfig.save(_ctrl.text);
-      if (check) {
-        final response = await live.ApiClient().request(
-          '/test',
-          auth: live.RequestAuth.none,
-        );
-        if (response['status'] != 'running')
-          throw const ApiException(
-            500,
-            'Máy chủ trả về phản hồi không phù hợp.',
-          );
-      }
+      final origin = validateServerUrl(_ctrl.text, _mode);
+      if (check) await checkServerConnection(origin);
+      await AppPreferencesService.instance.saveServerProfile(_mode, origin);
+      await ApiConfig.save(origin);
       if (mounted)
         setState(() {
           _ok = true;
@@ -107,6 +125,16 @@ class _FarmApiSettingsCardState extends State<FarmApiSettingsCard> {
               ),
             ),
             const Divider(),
+            DropdownButtonFormField<PushHostMode>(
+              key: ValueKey(_mode),
+              initialValue: _mode,
+              items: PushHostMode.values
+                  .map((m) => DropdownMenuItem(value: m, child: Text(m.label)))
+                  .toList(),
+              onChanged: _busy ? null : _modeChanged,
+              decoration: const InputDecoration(labelText: "Chế độ máy chủ"),
+            ),
+            const SizedBox(height: 12),
             TextField(
               controller: _ctrl,
               keyboardType: TextInputType.url,
@@ -152,6 +180,7 @@ class _FarmApiSettingsCardState extends State<FarmApiSettingsCard> {
           ],
         ),
       ),
+      const PushSettingsCard(),
     ],
   );
 }

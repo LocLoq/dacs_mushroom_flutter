@@ -1,3 +1,6 @@
+import 'dart:async';
+import '../services/workflow_refresh_service.dart';
+import '../network/farm_api.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -11,15 +14,20 @@ import 'async_views.dart';
 ///  - nút Trước/Sau bị khoá khi đang tải hoặc hết trang
 class PagedListView extends StatefulWidget {
   final Future<PageData> Function(int page, String search) fetch;
-  final Widget Function(BuildContext context, J item, VoidCallback reload) itemBuilder;
+  final Widget Function(BuildContext context, J item, VoidCallback reload)
+  itemBuilder;
   final String? searchHint;
   final Widget? header;
   final String emptyText;
   final List<Object?> deps;
   final EdgeInsets padding;
+  final List<String> refreshResources;
+  final Object? refreshId;
 
   const PagedListView({
     super.key,
+    this.refreshResources = const [],
+    this.refreshId,
     required this.fetch,
     required this.itemBuilder,
     this.searchHint,
@@ -34,6 +42,7 @@ class PagedListView extends StatefulWidget {
 }
 
 class PagedListViewState extends State<PagedListView> {
+  StreamSubscription<RefreshSignal>? _refreshSub;
   final _searchCtrl = TextEditingController();
   PageData _data = PageData.empty;
   int _page = 1;
@@ -45,6 +54,15 @@ class PagedListViewState extends State<PagedListView> {
   @override
   void initState() {
     super.initState();
+    _refreshSub = WorkflowRefreshService.instance.events.listen((signal) {
+      if (signal.matches(widget.refreshResources, widget.refreshId)) {
+        if (signal.reset) {
+          _data = PageData.empty;
+          _page = 1;
+        }
+        unawaited(load());
+      }
+    });
     load();
   }
 
@@ -59,6 +77,7 @@ class PagedListViewState extends State<PagedListView> {
 
   @override
   void dispose() {
+    _refreshSub?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -81,6 +100,9 @@ class PagedListViewState extends State<PagedListView> {
       if (!mounted || my != _ticket) return;
       setState(() {
         _error = e.toString();
+        if (e is ApiException &&
+            (e.isForbidden || e.status == 401 || e.status == 404))
+          _data = PageData.empty;
         _loading = false;
       });
     }
@@ -109,7 +131,9 @@ class PagedListViewState extends State<PagedListView> {
     } else if (_data.items.isEmpty) {
       body = RefreshIndicator(
         onRefresh: load,
-        child: ListView(children: [SizedBox(height: 240, child: EmptyView(widget.emptyText))]),
+        child: ListView(
+          children: [SizedBox(height: 240, child: EmptyView(widget.emptyText))],
+        ),
       );
     } else {
       body = RefreshIndicator(
@@ -134,7 +158,8 @@ class PagedListViewState extends State<PagedListView> {
               onSubmitted: (_) => _submitSearch(),
               onChanged: (v) {
                 setState(() {});
-                if (v.isEmpty && _search.isNotEmpty) _submitSearch(); // xoá search -> bỏ lọc ngay
+                if (v.isEmpty && _search.isNotEmpty)
+                  _submitSearch(); // xoá search -> bỏ lọc ngay
               },
               decoration: InputDecoration(
                 hintText: widget.searchHint,
@@ -157,7 +182,12 @@ class PagedListViewState extends State<PagedListView> {
             children: [
               body,
               if (_loading && _data.items.isNotEmpty)
-                const Positioned(top: 0, left: 0, right: 0, child: LinearProgressIndicator(minHeight: 3)),
+                const Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: LinearProgressIndicator(minHeight: 3),
+                ),
             ],
           ),
         ),
@@ -167,12 +197,19 @@ class PagedListViewState extends State<PagedListView> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
-                onPressed: (_loading || _page <= 1) ? null : () => _go(_page - 1),
+                onPressed: (_loading || _page <= 1)
+                    ? null
+                    : () => _go(_page - 1),
                 icon: const Icon(Icons.chevron_left_rounded),
               ),
-              Text('Trang $_page/$totalPages · ${_data.totalItems} mục', style: theme.textTheme.bodySmall),
+              Text(
+                'Trang $_page/$totalPages · ${_data.totalItems} mục',
+                style: theme.textTheme.bodySmall,
+              ),
               IconButton(
-                onPressed: (_loading || _page >= _data.totalPages) ? null : () => _go(_page + 1),
+                onPressed: (_loading || _page >= _data.totalPages)
+                    ? null
+                    : () => _go(_page + 1),
                 icon: const Icon(Icons.chevron_right_rounded),
               ),
             ],
