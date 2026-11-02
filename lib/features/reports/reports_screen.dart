@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../../core/storage/local_session.dart';
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -207,7 +208,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(children: [
-              for (final e in _groups.entries)
+              for (final e in _groups.entries.where((e) => e.key != 'audit' || LocalSession.isAdmin))
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(label: Text(e.value), selected: _group == e.key, onSelected: (_) => _setGroup(e.key)),
@@ -324,7 +325,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             _kpi('Số lô', '${c.i('batchCount') ?? 0}'),
             _kpi('Sản lượng', kg(c.d('totalHarvestKg'))),
             _kpi('Lượt nhận diện', '${cl.i('total') ?? 0}'),
-            _kpi('Hành động hệ thống', '${au.i('totalActions') ?? 0}'),
+            if (LocalSession.isAdmin) _kpi('Hành động hệ thống', '${au.i('totalActions') ?? 0}'),
           ]),
           const SizedBox(height: 8),
           Text('Bộ lọc cơ sở/giống/trạng thái chỉ áp dụng cho phần nuôi trồng; nhận diện và hoạt động chỉ theo ngày.',
@@ -337,7 +338,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Chip(label: Text('Nhận diện thành công ${cl.i('succeeded') ?? 0}')),
             Chip(label: Text('Nhận diện thất bại ${cl.i('failed') ?? 0}')),
             Chip(label: Text('Độ tin cậy TB ${pct01(cl.d('averageConfidence'))}')),
-            Chip(label: Text('Hành động lỗi ${au.i('failedActions') ?? 0}')),
+            if (LocalSession.isAdmin) Chip(label: Text('Hành động lỗi ${au.i('failedActions') ?? 0}')),
           ]),
           const SizedBox(height: 14),
           Text('Lô theo trạng thái', style: theme.textTheme.titleSmall),
@@ -351,7 +352,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           const SizedBox(height: 14),
           _bars('Lượt nhận diện', [for (final s in cl.l('series')) MapEntry(s.s('period'), (s.i('count') ?? 0).toDouble())], (v) => v.toInt().toString()),
           const SizedBox(height: 14),
-          _bars('Hành động hệ thống', [for (final s in au.l('series')) MapEntry(s.s('period'), (s.i('count') ?? 0).toDouble())], (v) => v.toInt().toString()),
+          if (LocalSession.isAdmin) _bars('Hành động hệ thống', [for (final s in au.l('series')) MapEntry(s.s('period'), (s.i('count') ?? 0).toDouble())], (v) => v.toInt().toString()),
         ]);
 
       }

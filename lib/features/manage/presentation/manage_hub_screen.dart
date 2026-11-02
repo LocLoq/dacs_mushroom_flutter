@@ -97,7 +97,7 @@ class _ManageHubScreenState extends State<ManageHubScreen> {
         'Số liệu và xuất file',
         () => const ReportsScreen(),
       ),
-    if (LocalSession.canManage)
+    if (LocalSession.isAdmin)
       _Tool(
         Icons.receipt_long_rounded,
         'Nhật ký hệ thống',
@@ -272,8 +272,10 @@ class _ManageHubScreenState extends State<ManageHubScreen> {
       ),
       const SizedBox(height: 16),
       // Mỗi lần đổi _tick Tổng quan được dựng lại và tải mới.
-      DashboardSection(key: ValueKey('dash-$_tick')),
-      const SizedBox(height: 22),
+      if (LocalSession.isAdmin) ...[
+        DashboardSection(key: ValueKey('dash-$_tick')),
+        const SizedBox(height: 22),
+      ],
       Text('Chức năng', style: Theme.of(context).textTheme.titleMedium),
       const SizedBox(height: 12),
       LayoutBuilder(

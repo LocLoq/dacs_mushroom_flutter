@@ -64,3 +64,13 @@ Flutter SDK 3.41.6 sinh test listener không escape dấu nháy đơn trong đư
 ## Thêm nhiều nhân viên vào cơ sở/lô
 
 Trong màn phân công, chọn nhiều người và xác nhận một lần. Picker lấy GET /staff?available=true: chỉ staff chưa được phân công, với lô phải đang thuộc cơ sở của lô. Lọc xảy ra trước phân trang/tìm kiếm. POST nhận userIds (1–100 ID, loại trùng); userId đơn vẫn tương thích. Nếu bất kỳ người nào không còn hợp lệ, toàn bộ lượt thêm rollback; form giữ lựa chọn và lỗi. Các chip tên cho phép bỏ chọn cả người ở trang khác hoặc đã mất điều kiện. Phân công đã được admin khác thêm được bỏ qua an toàn; chỉ thông báo cho phân công mới. Không thay đổi schema hoặc cách thu hồi từng người.
+
+## Quyền manager theo cơ sở và quản trị admin
+
+Admin vào Quản lý → Cơ sở → chi tiết cơ sở → Quản lý manager để gán/thu hồi manager. Một manager quản lý nhiều cơ sở và một cơ sở có nhiều manager. Chỉ admin được thay đổi danh sách nhân viên của cơ sở/lô.
+
+Manager chỉ giao việc cho nhân viên thuộc cơ sở được quản lý; công việc không gắn lô vẫn được phép. Nếu chọn lô, người nhận phải thuộc cơ sở của lô và được phân công lô. Picker lấy danh sách từ backend; khi đổi lô, người nhận cũ được xóa để chọn lại. Backend kiểm tra lại khi lưu và sau khi admin thu hồi quyền.
+
+Tổng quan dashboard, người dùng và nhật ký hệ thống chỉ dành cho admin. Manager/staff sử dụng Công việc và các công cụ nghiệp vụ trong tab Quản lý. API công việc vẫn dùng /dashboard/tasks.
+
+Backend ngoài Docker cần npm run db:migrate:managers và npm run prisma:generate trước khi chạy bản mới. Các tài khoản manager cũ cần được admin gán cơ sở, không tự nhận quyền toàn hệ thống.

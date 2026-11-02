@@ -19,6 +19,7 @@ class DashboardSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!LocalSession.isAdmin) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final api = FarmApi.instance;
     final now = DateTime.now();

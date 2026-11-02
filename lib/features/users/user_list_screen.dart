@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/storage/local_session.dart';
 
 import '../../core/network/farm_api.dart';
 import '../../core/utils/format.dart';
@@ -165,6 +166,14 @@ class _UserListScreenState extends State<UserListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!LocalSession.isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Quản trị')),
+        body: const Center(
+          child: Text('Chỉ admin được truy cập chức năng này.'),
+        ),
+      );
+    }
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Người dùng')),

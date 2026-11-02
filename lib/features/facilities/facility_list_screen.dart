@@ -166,10 +166,9 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final canManage = LocalSession.canManage;
     return Scaffold(
       appBar: AppBar(title: const Text('Cơ sở sản xuất')),
-      floatingActionButton: canManage
+      floatingActionButton: LocalSession.isAdmin
           ? FloatingActionButton.extended(
               onPressed: _create,
               icon: const Icon(Icons.add_rounded),
@@ -342,6 +341,20 @@ class _FacilityDetail extends StatelessWidget {
               ),
               icon: const Icon(Icons.group_outlined),
               label: const Text('Quản lý nhân viên'),
+            ),
+          if (LocalSession.isAdmin)
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(ctx).push(
+                MaterialPageRoute(
+                  builder: (_) => StaffAssignmentScreen(
+                    path: '/production-facilities/$id/managers',
+                    title: 'Manager cơ sở',
+                    managers: true,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.supervisor_account_outlined),
+              label: const Text('Quản lý manager'),
             ),
           const SizedBox(height: 20),
           EntityGallery(

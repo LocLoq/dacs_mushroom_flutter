@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/storage/local_session.dart';
 
 import '../../core/network/farm_api.dart';
 import '../../core/utils/format.dart';
@@ -7,7 +8,7 @@ import '../../core/widgets/paged_list.dart';
 import '../../core/widgets/soft_card.dart';
 import '../../core/widgets/status_chip.dart';
 
-/// Nhật ký hệ thống, chỉ đọc — manager/admin (specs/S15_AUDIT_LOG.md).
+/// Nhật ký hệ thống, chỉ đọc — admin (specs/S15_AUDIT_LOG.md).
 class AuditLogScreen extends StatefulWidget {
   const AuditLogScreen({super.key});
 
@@ -69,6 +70,14 @@ class _AuditLogScreenState extends State<AuditLogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!LocalSession.isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Quản trị')),
+        body: const Center(
+          child: Text('Chỉ admin được truy cập chức năng này.'),
+        ),
+      );
+    }
     final theme = Theme.of(context);
     final badRange =
         _from != null && _to != null && _from!.isAfter(_to!); // from ≤ to

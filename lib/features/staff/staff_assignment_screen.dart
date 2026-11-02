@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/storage/local_session.dart';
 import '../../core/network/farm_api.dart';
 import '../../core/utils/json_utils.dart';
 import '../../core/widgets/form_sheet.dart';
@@ -11,9 +12,11 @@ class StaffAssignmentScreen extends StatefulWidget {
     required this.path,
     required this.title,
     this.facilityId,
+    this.managers = false,
   });
   final String path, title;
   final int? facilityId;
+  final bool managers;
   @override
   State<StaffAssignmentScreen> createState() => _StaffAssignmentScreenState();
 }
@@ -29,8 +32,10 @@ class _StaffAssignmentScreenState extends State<StaffAssignmentScreen> {
       final selected = await pickManyFrom(
         context,
         PickerSource(
-          title: 'Chọn nhân viên',
-          emptyText: 'Không còn nhân viên đủ điều kiện để thêm.',
+          title: widget.managers ? 'Chọn manager' : 'Chọn nhân viên',
+          emptyText: widget.managers
+              ? 'Không còn manager đủ điều kiện để thêm.'
+              : 'Không còn nhân viên đủ điều kiện để thêm.',
           fetch: (page, search) async => PageData.from(
             await FarmApi.instance.get(
               widget.path,
@@ -60,7 +65,7 @@ class _StaffAssignmentScreenState extends State<StaffAssignmentScreen> {
         toast(
           context,
           addedCount > 0
-              ? 'Đã thêm $addedCount nhân viên.'
+              ? 'Đã thêm $addedCount ${widget.managers ? 'manager' : 'nhân viên'}.'
               : 'Danh sách phân công đã được cập nhật.',
         );
     } finally {
@@ -72,8 +77,9 @@ class _StaffAssignmentScreenState extends State<StaffAssignmentScreen> {
     final ok = await confirmDialog(
       context,
       title: 'Thu hồi quyền?',
-      message:
-          'Nhân viên sẽ mất quyền thao tác. Công việc và lịch sử được giữ lại.',
+      message: widget.managers
+          ? 'Manager sẽ mất quyền quản lý cơ sở này. Công việc và lịch sử được giữ lại.'
+          : 'Nhân viên sẽ mất quyền thao tác. Công việc và lịch sử được giữ lại.',
     );
     if (!ok) return;
     try {
@@ -85,32 +91,41 @@ class _StaffAssignmentScreenState extends State<StaffAssignmentScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text(widget.title)),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: _adding ? null : _add,
-      icon: const Icon(Icons.person_add_alt),
-      label: const Text('Thêm nhân viên'),
-    ),
-    body: PagedListView(
-      key: _key,
-      refreshResources: const ['permissions'],
-      emptyText: 'Chưa có nhân viên được phân công.',
-      fetch: (page, _) async => PageData.from(
-        await FarmApi.instance.get(
-          widget.path,
-          query: {'page': page, 'limit': 20},
+  Widget build(BuildContext context) {
+    if (!LocalSession.isAdmin) {
+      return const Scaffold(
+        body: Center(child: Text('Bạn không có quyền phân công tại đây.')),
+      );
+    }
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.title)),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _adding ? null : _add,
+        icon: const Icon(Icons.person_add_alt),
+        label: Text(widget.managers ? 'Thêm manager' : 'Thêm nhân viên'),
+      ),
+      body: PagedListView(
+        key: _key,
+        refreshResources: const ['permissions'],
+        emptyText: widget.managers
+            ? 'Chưa có manager được phân công.'
+            : 'Chưa có nhân viên được phân công.',
+        fetch: (page, _) async => PageData.from(
+          await FarmApi.instance.get(
+            widget.path,
+            query: {'page': page, 'limit': 20},
+          ),
+        ),
+        itemBuilder: (context, item, _) => ListTile(
+          title: Text(item.m('user')?.s('full_name') ?? ''),
+          subtitle: Text(item.m('user')?.s('username') ?? ''),
+          trailing: IconButton(
+            tooltip: 'Thu hồi quyền',
+            icon: const Icon(Icons.person_remove_outlined),
+            onPressed: () => _remove(item),
+          ),
         ),
       ),
-      itemBuilder: (context, item, _) => ListTile(
-        title: Text(item.m('user')?.s('full_name') ?? ''),
-        subtitle: Text(item.m('user')?.s('username') ?? ''),
-        trailing: IconButton(
-          tooltip: 'Thu hồi quyền',
-          icon: const Icon(Icons.person_remove_outlined),
-          onPressed: () => _remove(item),
-        ),
-      ),
-    ),
-  );
+    );
+  }
 }

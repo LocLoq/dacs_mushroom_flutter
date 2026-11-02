@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/storage/local_session.dart';
 import '../../core/utils/json_utils.dart';
 import '../../core/utils/format.dart';
 import '../../core/widgets/form_sheet.dart';
@@ -174,6 +175,10 @@ class _TaskFormState extends State<_TaskForm> {
               trailing: const Icon(Icons.person_outline),
               onTap: _locked || _busy ? null : _pickAssignee,
             ),
+            if (LocalSession.role == 'manager')
+              const Text(
+                'Chỉ chọn nhân viên thuộc cơ sở bạn quản lý. Nếu chọn lô, nhân viên phải được phân công lô đó.',
+              ),
             if (_locked)
               const Text('Công việc chờ duyệt: giữ nguyên lô và người nhận.'),
             ListTile(

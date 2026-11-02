@@ -111,7 +111,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
           : null,
       body: PagedListView(
         key: _key,
-        refreshResources: const ['tasks'],
+        refreshResources: const ['tasks', 'permissions'],
         searchHint: 'Tìm theo tiêu đề',
         emptyText: 'Không có công việc nào.',
         deps: [_status, _mine, _batch?['id']],

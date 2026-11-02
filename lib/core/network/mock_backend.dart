@@ -35,6 +35,10 @@ class MockBackend {
     2: {3, 4},
   };
   final Map<int, Set<int>> _batchMembers = {};
+  final Map<int, Set<int>> _facilityManagers = {
+    1: {2},
+    2: {2},
+  };
   final Map<String, J> _pushDevices = {};
   final Map<int, String> _pw = {};
   final Map<String, int> _batchCounters = {};
@@ -578,6 +582,9 @@ class MockBackend {
     final user = userId == null
         ? _me()
         : _users.firstWhere((user) => user.i('id') == userId);
+    if (_roleName(user.i('role_id')) == 'manager') {
+      return _facilityManagers[facilityId]?.contains(user.i('id')) ?? false;
+    }
     return _roleName(user.i('role_id')) != 'staff' ||
         (_facilityMembers[facilityId]?.contains(user.i('id')) ?? false);
   }
@@ -586,11 +593,12 @@ class MockBackend {
     final user = userId == null
         ? _me()
         : _users.firstWhere((user) => user.i('id') == userId);
-    if (_roleName(user.i('role_id')) != 'staff') return true;
+    if (_roleName(user.i('role_id')) == 'admin') return true;
     final batches = _batches.where((batch) => batch.i('id') == batchId);
     return batches.isNotEmpty &&
         _canUseFacility(batches.first.i('facilityId')!, user.i('id')) &&
-        (_batchMembers[batchId]?.contains(user.i('id')) ?? false);
+        (_roleName(user.i('role_id')) == 'manager' ||
+            (_batchMembers[batchId]?.contains(user.i('id')) ?? false));
   }
 
   void _assertBatch(int id) {
@@ -598,15 +606,43 @@ class MockBackend {
       throw _err(403, 'Bạn không được phân công lô này.', 'AUTH_FORBIDDEN');
   }
 
+  bool _managedAssignee(int? userId) {
+    if (userId == null)
+      return _facilityManagers.values.any((ids) => ids.contains(_me().i('id')));
+    final users = _users.where((u) => u.i('id') == userId);
+    if (users.isEmpty || _roleName(users.first.i('role_id')) != 'staff')
+      return false;
+    return _facilityMembers.entries.any(
+      (entry) => entry.value.contains(userId) && _canUseFacility(entry.key),
+    );
+  }
+
+  bool _managerTask(J task) {
+    if (task.i('batchId') != null) return _canUseBatch(task.i('batchId')!);
+    return (task.i('assigneeUserId') != null ||
+            task.i('createdByUserId') == _me().i('id')) &&
+        _managedAssignee(task.i('assigneeUserId'));
+  }
+
   void _validateTaskAssignment(
     int? batchId,
     int? userId, {
     bool allowRevoked = false,
+    bool assigning = true,
   }) {
     if (batchId != null && !_batches.any((row) => row.i('id') == batchId))
       throw _err(400, 'Lô không tồn tại.');
     if (userId != null && !_users.any((row) => row.i('id') == userId))
       throw _err(400, 'Người nhận không tồn tại.');
+    if (LocalSession.role == 'manager') {
+      if (batchId != null) _assertBatch(batchId);
+      if (assigning && !_managedAssignee(userId))
+        throw _err(
+          403,
+          'Chỉ giao việc cho nhân viên thuộc cơ sở bạn quản lý.',
+          'AUTH_FORBIDDEN',
+        );
+    }
     if (!allowRevoked &&
         batchId != null &&
         userId != null &&
@@ -635,6 +671,88 @@ class MockBackend {
     WorkflowRefreshService.instance.invalidate('notifications');
   }
 
+  J _managerAssignmentRoute(String m, List<String> s, J q, J b) {
+    _need(['admin']);
+    final facilityId = int.tryParse(s[1]);
+    if (facilityId == null || !_facilities.any((f) => f.i('id') == facilityId))
+      throw _err(404, 'Không tìm thấy cơ sở.');
+    final members = _facilityManagers.putIfAbsent(facilityId, () => <int>{});
+    if (m == 'GET') {
+      final search = (q['search'] ?? '').toString().toLowerCase();
+      final available = q['available'].toString() == 'true';
+      final rows = _users
+          .where(
+            (u) =>
+                _roleName(u.i('role_id')) == 'manager' &&
+                (available
+                    ? !members.contains(u.i('id'))
+                    : members.contains(u.i('id'))) &&
+                (search.isEmpty ||
+                    u.s('username').toLowerCase().contains(search) ||
+                    u.s('full_name').toLowerCase().contains(search)),
+          )
+          .map(
+            (u) => available
+                ? {
+                    'id': u['id'],
+                    'username': u['username'],
+                    'full_name': u['full_name'],
+                  }
+                : {
+                    'facilityId': facilityId,
+                    'userId': u['id'],
+                    'createdAt': _nowIso(),
+                    'user': {
+                      'id': u['id'],
+                      'username': u['username'],
+                      'full_name': u['full_name'],
+                    },
+                  },
+          )
+          .toList();
+      return _env(rows, q);
+    }
+    if (m == 'POST') {
+      final bulk = b.containsKey('userIds');
+      if (bulk && b.containsKey('userId'))
+        throw _err(400, 'Chỉ gửi userId hoặc userIds.');
+      final raw = bulk ? b['userIds'] : [b['userId']];
+      if (raw is! List ||
+          raw.isEmpty ||
+          raw.length > 100 ||
+          raw.any((v) => v is! int || v <= 0))
+        throw _err(400, 'Manager không hợp lệ.');
+      final ids = raw.cast<int>().toSet();
+      if (ids.any(
+        (id) => !_users.any(
+          (u) => u.i('id') == id && _roleName(u.i('role_id')) == 'manager',
+        ),
+      ))
+        throw _err(400, 'Chỉ chọn tài khoản manager.', 'ASSIGNMENT_INELIGIBLE');
+      final added = ids.where((id) => !members.contains(id)).length;
+      members.addAll(ids);
+      WorkflowRefreshService.instance.invalidate('permissions');
+      WorkflowRefreshService.instance.invalidate('tasks');
+      final rows = ids
+          .map(
+            (id) => <String, dynamic>{
+              'facilityId': facilityId,
+              'userId': id,
+              'grantedByUserId': _me().i('id'),
+            },
+          )
+          .toList();
+      return bulk ? {'data': rows, 'addedCount': added} : {'data': rows.first};
+    }
+    if (m == 'DELETE' && s.length == 4) {
+      members.remove(int.tryParse(s[3]));
+      WorkflowRefreshService.instance.invalidate('permissions');
+      WorkflowRefreshService.instance.invalidate('tasks');
+      return {'message': 'Đã thu hồi quyền quản lý cơ sở'};
+    }
+    throw _err(405, 'Phương thức không hỗ trợ.');
+  }
+
   J _assignmentRoute(String m, List<String> s, J q, J b) {
     _need(['admin']);
     final isBatch = s[0] == 'cultivation-batches';
@@ -650,6 +768,8 @@ class MockBackend {
     final facilityId = isBatch
         ? parents.firstWhere((row) => row.i('id') == parentId).i('facilityId')
         : parentId;
+    if (!_canUseFacility(facilityId!))
+      throw _err(403, 'Bạn không quản lý cơ sở này.', 'AUTH_FORBIDDEN');
     bool matches(J user, String search) =>
         search.isEmpty ||
         user.s('full_name').toLowerCase().contains(search) ||
@@ -877,6 +997,8 @@ class MockBackend {
   }) {
     if (s.isEmpty) throw _err(404, 'Không tìm thấy đường dẫn.');
     if (s[0] == 'notifications') return _notificationRoute(m, s, q, b);
+    if (s.length >= 3 && s[0] == 'production-facilities' && s[2] == 'managers')
+      return _managerAssignmentRoute(m, s, q, b);
     if (s.length >= 3 &&
         s[2] == 'staff' &&
         ['production-facilities', 'cultivation-batches'].contains(s[0]))
@@ -1322,7 +1444,7 @@ class MockBackend {
         return _env(l, q);
       }
       if (m == 'POST') {
-        _need(['admin', 'manager']);
+        _need(['admin']);
         _req(b, ['name', 'address', 'facilityType', 'status']);
         final x = <String, dynamic>{'id': _next(), 'mushroom_ids': <int>[]};
         _copy(x, b, _facilityKeys);
@@ -1858,7 +1980,9 @@ class MockBackend {
       _need(['admin', 'manager']);
       final se = '${q['search'] ?? ''}'.toLowerCase();
       final filterBatch = int.tryParse((q['batchId'] ?? '').toString());
+      if (filterBatch != null) _assertBatch(filterBatch);
       final l = _users
+          .where((user) => role != 'manager' || _managedAssignee(user.i('id')))
           .where(
             (user) =>
                 filterBatch == null || _canUseBatch(filterBatch, user.i('id')),
@@ -1888,10 +2012,12 @@ class MockBackend {
             _tasks
                 .where(
                   (t) =>
-                      (canManage ||
-                          t.i('assigneeUserId') == myId &&
-                              (t.i('batchId') == null ||
-                                  _canUseBatch(t.i('batchId')!))) &&
+                      (role == 'manager'
+                          ? _managerTask(t)
+                          : canManage ||
+                                t.i('assigneeUserId') == myId &&
+                                    (t.i('batchId') == null ||
+                                        _canUseBatch(t.i('batchId')!))) &&
                       (st == null
                           ? (canManage
                                     ? _openStatuses
@@ -1941,6 +2067,8 @@ class MockBackend {
     final ti = _tasks.indexWhere((t) => t.s('id') == s[2]);
     if (ti < 0) throw _err(404, 'Không tìm thấy công việc.');
     final t = _tasks[ti];
+    if (role == 'manager' && !_managerTask(t))
+      throw _err(403, 'Bạn không quản lý công việc này.', 'AUTH_FORBIDDEN');
     if (!canManage &&
         (t.i('assigneeUserId') != myId ||
             t.i('batchId') != null && !_canUseBatch(t.i('batchId')!)))
@@ -2020,7 +2148,12 @@ class MockBackend {
           b.containsKey('assigneeUserId')
               ? (b['assigneeUserId'] as num?)?.toInt()
               : t.i('assigneeUserId'),
-          allowRevoked: b['status'] == 'CANCELLED',
+          allowRevoked:
+              b['status'] == 'CANCELLED' &&
+              !b.containsKey('batchId') &&
+              !b.containsKey('assigneeUserId'),
+          assigning:
+              b.containsKey('batchId') || b.containsKey('assigneeUserId'),
         );
         _copy(t, b, ['description', 'batchId', 'assigneeUserId', 'dueAt']);
         _log('TASK_UPDATE', 'TASK', t['id']);
@@ -2176,7 +2309,7 @@ class MockBackend {
     }
     if (s.length < 2) throw _err(404, 'Không tìm thấy đường dẫn.');
     if (s[1] == 'audit-logs') {
-      _need(['admin', 'manager']);
+      _need(['admin']);
       final act = '${q['action'] ?? ''}';
       final ent = '${q['entityType'] ?? ''}';
       final eid = '${q['entityId'] ?? ''}';
@@ -2397,6 +2530,7 @@ class MockBackend {
 
   J _report(String kind, J q) {
     _need(['admin', 'manager']);
+    if (kind == 'audit') _need(['admin']);
     final from = q['from']?.toString();
     final to = q['to']?.toString();
     final gb = q['groupBy']?.toString() == 'day' ? 'day' : 'month';
@@ -2426,7 +2560,7 @@ class MockBackend {
               .where((h) => _inRange(h.sn('createdAt'), from, to))
               .toList();
           final ok = cls.where((h) => h['status'] == 'SUCCEEDED').toList();
-          final aud = _audit
+          final aud = (LocalSession.isAdmin ? _audit : <J>[])
               .where((a) => _inRange(a.sn('createdAt'), from, to))
               .toList();
           return {
