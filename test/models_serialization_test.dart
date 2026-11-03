@@ -68,6 +68,21 @@ void main() {
       expect(response.mushrooms.first.isPoisonous, false);
       expect(response.mushrooms.last.isPoisonous, true);
     });
+
+    test('MushroomCatalogItem: assetKey và image_url cho ảnh đại diện', () {
+      final item = MushroomCatalogItem.fromJson({
+        'name': 'Mộc Nhĩ',
+        'scientific_name': 'Auricularia auricula-judae',
+        'is_poisonous': false,
+        'image_url': '/media/mushrooms/moc-nhi.jpg',
+      });
+      expect(item.assetKey, 'auricularia_auricula_judae');
+      expect(item.imageUrl, '/media/mushrooms/moc-nhi.jpg');
+      expect(item.toJson()['image_url'], '/media/mushrooms/moc-nhi.jpg');
+
+      final noImage = MushroomCatalogItem.fromJson({'name': 'Nấm Rơm', 'is_poisonous': false});
+      expect(noImage.imageUrl, isNull);
+      expect(noImage.toJson().containsKey('image_url'), isFalse);
+    });
   });
 }
-

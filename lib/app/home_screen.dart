@@ -1,379 +1,369 @@
 import 'package:flutter/material.dart';
 
 import '../core/localization/app_text_scope.dart';
-import '../core/storage/local_session.dart';
-import '../features/account/presentation/account_list_screen.dart';
-import '../features/auth/presentation/login_screen.dart';
-import '../features/cultivation_batch/presentation/batch_list_screen.dart';
-import '../features/facility/presentation/facility_list_screen.dart';
+import '../core/widgets/mushroom_glyph.dart';
+import '../features/manage/presentation/manage_hub_screen.dart';
 import '../features/mushroom_catalog/presentation/mushroom_catalog_screen.dart';
-import '../features/mushroom_strain/presentation/strain_list_screen.dart';
 import '../features/recognition/presentation/mushroom_recognition_screen.dart';
+import '../features/recognition_history/presentation/history_hub.dart';
 import '../features/settings/presentation/first_run_backend_dialog.dart';
+import '../features/settings/presentation/settings_screen.dart';
+import 'theme/app_colors.dart';
+
+/// Các trang chính. Chỉ số này cũng là giá trị của [HomeScreen.initialIndex].
+const int kPageScan = 0;
+const int kPageCatalog = 1;
+const int kPageHistory = 2;
+const int kPageManage = 3;
+const int kPageSettings = 4;
 
 class HomeScreen extends StatefulWidget {
   final int initialIndex;
 
-  const HomeScreen({super.key, this.initialIndex = 0});
+  const HomeScreen({super.key, this.initialIndex = kPageScan});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  static const _compactBreakpoint = 600.0;
-  static const _expandedSidebarBreakpoint = 1024.0;
-  static const _railWidth = 72.0;
-  static const _expandedRailWidth = 220.0;
-
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
   late int _index;
-  bool? _sidebarExpandedOverride;
-  bool? _wasCompact;
-
-  final List<_NavigationItem> _items = const [
-    _NavigationItem(
-      Icons.auto_awesome_outlined,
-      Icons.auto_awesome,
-      'Nhận diện AI',
-    ),
-    _NavigationItem(Icons.menu_book_outlined, Icons.menu_book, 'Từ điển'),
-    _NavigationItem(Icons.factory_outlined, Icons.factory, 'Cơ sở'),
-    _NavigationItem(Icons.spa_outlined, Icons.spa, 'Giống nấm'),
-    _NavigationItem(Icons.eco_outlined, Icons.eco, 'Lô nuôi trồng'),
-    _NavigationItem(Icons.people_outline, Icons.people, 'Tài khoản'),
-  ];
+  final Set<int> _visited = {};
+  int _historyTick = 0;
 
   @override
   void initState() {
     super.initState();
-    _index = widget.initialIndex;
+    _index = widget.initialIndex.clamp(0, 4);
+    _visited.add(_index);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FirstRunBackendDialog.checkAndShow(context);
     });
   }
 
-  void _openNavigation() {
-    _scaffoldKey.currentState?.openDrawer();
+  void _select(int i) {
+    if (i == _index) return;
+    setState(() {
+      _index = i;
+      _visited.add(i);
+      if (i == kPageHistory) _historyTick++; // tải lại lịch sử mỗi lần mở tab
+    });
   }
 
-  void _selectDestination(int index, {bool closeDrawer = false}) {
-    setState(() => _index = index);
-
-    if (closeDrawer && (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
-      Navigator.of(context).pop();
-    }
-  }
-
-  Widget _buildBody({VoidCallback? onOpenNavigation}) {
-    switch (_index) {
-      case 0:
-        return MushroomRecognitionScreen(onOpenNavigation: onOpenNavigation);
-      case 1:
-        return MushroomCatalogScreen(onOpenNavigation: onOpenNavigation);
-      case 2:
-        return LocalSession.isLoggedIn
-            ? FacilityListScreen(onOpenNavigation: onOpenNavigation)
-            : _AuthRequiredPlaceholder(
-                title: tr(
-                  context,
-                  vi: 'Quản Lý Cơ Sở Trại Nấm',
-                  en: 'Facility Management',
-                ),
-                description: tr(
-                  context,
-                  vi: 'Tính năng quản lý cơ sở nuôi trồng chỉ dành cho nhân sự và ban quản lý trại. Vui lòng đăng nhập để tiếp tục.',
-                  en: 'Facility management is restricted to authorized personnel. Please login to proceed.',
-                ),
-                onLoginSuccess: () => setState(() {}),
-                onOpenNavigation: onOpenNavigation,
-              );
-      case 3:
-        return LocalSession.isLoggedIn
-            ? StrainListScreen(onOpenNavigation: onOpenNavigation)
-            : _AuthRequiredPlaceholder(
-                title: tr(
-                  context,
-                  vi: 'Quản Lý Giống Nấm',
-                  en: 'Mushroom Strains',
-                ),
-                description: tr(
-                  context,
-                  vi: 'Tính năng cấu hình thông số kỹ thuật giống nấm (nhiệt độ, độ ẩm, CO2) yêu cầu quyền quản trị.',
-                  en: 'Strain parameter management (temp, humidity, CO2) requires authentication.',
-                ),
-                onLoginSuccess: () => setState(() {}),
-                onOpenNavigation: onOpenNavigation,
-              );
-      case 4:
-        return LocalSession.isLoggedIn
-            ? BatchListScreen(onOpenNavigation: onOpenNavigation)
-            : _AuthRequiredPlaceholder(
-                title: tr(
-                  context,
-                  vi: 'Quản Lý Lô Nuôi Trồng',
-                  en: 'Cultivation Batch Management',
-                ),
-                description: tr(
-                  context,
-                  vi: 'Tính năng theo dõi lô nuôi trồng (ủ tơ, ra quả thể, thu hoạch, năng suất) yêu cầu đăng nhập.',
-                  en: 'Batch tracking (incubation, fruiting, harvesting, yield) requires authentication.',
-                ),
-                onLoginSuccess: () => setState(() {}),
-                onOpenNavigation: onOpenNavigation,
-              );
-      case 5:
-        return LocalSession.isLoggedIn
-            ? AccountListScreen(onOpenNavigation: onOpenNavigation)
-            : _AuthRequiredPlaceholder(
-                title: tr(
-                  context,
-                  vi: 'Quản Trị Tài Khoản',
-                  en: 'Account Management',
-                ),
-                description: tr(
-                  context,
-                  vi: 'Tính năng phân quyền và quản trị nhân sự yêu cầu tài khoản quản lý / admin.',
-                  en: 'User administration and role management requires admin/manager privileges.',
-                ),
-                onLoginSuccess: () => setState(() {}),
-                onOpenNavigation: onOpenNavigation,
-              );
+  Widget _page(int i) {
+    switch (i) {
+      case kPageScan:
+        return const MushroomRecognitionScreen();
+      case kPageCatalog:
+        return const MushroomCatalogScreen();
+      case kPageHistory:
+        return HistoryHub(key: ValueKey('history-$_historyTick'));
+      case kPageManage:
+        return const ManageHubScreen();
       default:
-        return MushroomRecognitionScreen(onOpenNavigation: onOpenNavigation);
+        return const SettingsScreen(embedded: true);
     }
   }
 
-  Widget _buildDrawer(BuildContext context, double screenWidth) {
-    final drawerWidth = screenWidth * 0.9 > 300 ? 300.0 : screenWidth * 0.9;
-    final theme = Theme.of(context);
+  List<_Dest> _destinations(BuildContext context) => [
+        _Dest(kPageScan, Icons.center_focus_strong_outlined,
+            Icons.center_focus_strong_rounded,
+            tr(context, vi: 'Quét', en: 'Scan')),
+        _Dest(kPageCatalog, Icons.menu_book_outlined, Icons.menu_book_rounded,
+            tr(context, vi: 'Từ điển', en: 'Catalog')),
+        _Dest(kPageHistory, Icons.history_rounded, Icons.history_rounded,
+            tr(context, vi: 'Lịch sử', en: 'History')),
+        _Dest(kPageManage, Icons.grid_view_outlined, Icons.grid_view_rounded,
+            tr(context, vi: 'Quản lý', en: 'Manage')),
+        _Dest(kPageSettings, Icons.settings_outlined, Icons.settings_rounded,
+            tr(context, vi: 'Cài đặt', en: 'Settings')),
+      ];
 
-    return DrawerTheme(
-      data: DrawerTheme.of(context).copyWith(width: drawerWidth),
-      child: NavigationDrawer(
-        key: const Key('home-navigation-drawer'),
-        selectedIndex: _index,
-        onDestinationSelected: (index) {
-          _selectDestination(index, closeDrawer: true);
-        },
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(28, 28, 20, 20),
-            child: Row(
-              children: [
-                Icon(Icons.eco_rounded, color: theme.colorScheme.primary),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    tr(
-                      context,
-                      vi: 'Quản lý & Nhận diện Nấm',
-                      en: 'Mushroom Management & AI',
-                    ),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+  @override
+  Widget build(BuildContext context) {
+    final dests = _destinations(context);
+    final body = IndexedStack(
+      index: _index,
+      children: [
+        for (var i = 0; i < 5; i++)
+          _visited.contains(i) ? _page(i) : const SizedBox.shrink(),
+      ],
+    );
+
+    final wide = MediaQuery.of(context).size.width >= 840;
+    if (wide) {
+      return Scaffold(
+        body: Row(
+          children: [
+            _SideRail(dests: dests, index: _index, onSelect: _select),
+            Expanded(child: body),
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      extendBody: false,
+      body: body,
+      bottomNavigationBar: _BottomBar(
+        // Thứ tự hiển thị: Từ điển, Lịch sử, [Quét], Quản lý, Cài đặt
+        left: [dests[1], dests[2]],
+        center: dests[0],
+        right: [dests[3], dests[4]],
+        index: _index,
+        onSelect: _select,
+      ),
+    );
+  }
+}
+
+class _Dest {
+  final int page;
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+
+  const _Dest(this.page, this.icon, this.selectedIcon, this.label);
+}
+
+// ─────────────────────────── Thanh điều hướng dưới ───────────────────────────
+
+class _BottomBar extends StatelessWidget {
+  final List<_Dest> left;
+  final _Dest center;
+  final List<_Dest> right;
+  final int index;
+  final ValueChanged<int> onSelect;
+
+  const _BottomBar({
+    required this.left,
+    required this.center,
+    required this.right,
+    required this.index,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final centerSelected = index == center.page;
+
+    Widget item(_Dest d) => Expanded(
+          child: _NavItem(
+            dest: d,
+            selected: index == d.page,
+            onTap: () => onSelect(d.page),
+          ),
+        );
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+        child: Container(
+          height: 72,
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: scheme.outlineVariant),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF173F0E).withValues(alpha: 0.12),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              for (final d in left) item(d),
+              Expanded(
+                child: Center(
+                  child: Semantics(
+                    button: true,
+                    label: center.label,
+                    child: GestureDetector(
+                      onTap: () => onSelect(center.page),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          gradient: AppColors.heroGradient,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: centerSelected
+                                ? AppColors.leaf
+                                : Colors.transparent,
+                            width: 3,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primaryDark
+                                  .withValues(alpha: 0.35),
+                              blurRadius: 14,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.center_focus_strong_rounded,
+                          color: Colors.white,
+                          size: 26,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ],
+              ),
+              for (final d in right) item(d),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  final _Dest dest;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.dest,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = selected ? scheme.primary : scheme.onSurfaceVariant;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+            decoration: BoxDecoration(
+              color: selected ? scheme.primaryContainer : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(
+              selected ? dest.selectedIcon : dest.icon,
+              size: 22,
+              color: color,
             ),
           ),
-          const Divider(height: 1),
-          ..._items.map(
-            (item) => NavigationDrawerDestination(
-              icon: Icon(item.unselectedIcon),
-              selectedIcon: Icon(item.selectedIcon),
-              label: Text(item.label),
+          const SizedBox(height: 2),
+          Text(
+            dest.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: color,
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildRail(BuildContext context, bool isExpanded) {
-    return NavigationRail(
-      selectedIndex: _index,
-      extended: isExpanded,
-      minWidth: _railWidth,
-      minExtendedWidth: _expandedRailWidth,
-      labelType: NavigationRailLabelType.none,
-      leading: Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 12),
-        child: Tooltip(
-          message: isExpanded
-              ? tr(context, vi: 'Thu gọn menu', en: 'Collapse menu')
-              : tr(context, vi: 'Mở rộng menu', en: 'Expand menu'),
-          child: IconButton(
-            key: const Key('home-rail-toggle'),
-            icon: Icon(
-              isExpanded ? Icons.menu_open_rounded : Icons.menu_rounded,
-            ),
-            onPressed: () {
-              setState(() => _sidebarExpandedOverride = !isExpanded);
-            },
-          ),
-        ),
-      ),
-      onDestinationSelected: _selectDestination,
-      destinations: _items
-          .map(
-            (item) => NavigationRailDestination(
-              icon: Tooltip(
-                message: item.label,
-                child: Icon(item.unselectedIcon),
-              ),
-              selectedIcon: Tooltip(
-                message: item.label,
-                child: Icon(item.selectedIcon),
-              ),
-              label: Text(item.label),
-            ),
-          )
-          .toList(),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final isCompact = screenWidth < _compactBreakpoint;
-    final isExpandedByDefault = screenWidth >= _expandedSidebarBreakpoint;
-    final isRailExpanded = _sidebarExpandedOverride ?? isExpandedByDefault;
-    final theme = Theme.of(context);
-
-    if (_wasCompact == true && !isCompact) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
-          Navigator.of(context).pop();
-        }
-      });
-    }
-    _wasCompact = isCompact;
-
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: theme.colorScheme.surface,
-      drawer: isCompact ? _buildDrawer(context, screenWidth) : null,
-      drawerEnableOpenDragGesture: isCompact,
-      body: isCompact
-          ? _buildBody(onOpenNavigation: _openNavigation)
-          : Row(
-              children: [
-                _buildRail(context, isRailExpanded),
-                const VerticalDivider(width: 1),
-                Expanded(child: _buildBody()),
-              ],
-            ),
-    );
-  }
 }
 
-class _NavigationItem {
-  final IconData unselectedIcon;
-  final IconData selectedIcon;
-  final String label;
+// ─────────────────────────── Thanh bên (màn rộng) ───────────────────────────
 
-  const _NavigationItem(this.unselectedIcon, this.selectedIcon, this.label);
-}
+class _SideRail extends StatelessWidget {
+  final List<_Dest> dests;
+  final int index;
+  final ValueChanged<int> onSelect;
 
-class _AuthRequiredPlaceholder extends StatelessWidget {
-  final String title;
-  final String description;
-  final VoidCallback onLoginSuccess;
-  final VoidCallback? onOpenNavigation;
-
-  const _AuthRequiredPlaceholder({
-    required this.title,
-    required this.description,
-    required this.onLoginSuccess,
-    this.onOpenNavigation,
+  const _SideRail({
+    required this.dests,
+    required this.index,
+    required this.onSelect,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
-      appBar: AppBar(
-        leading: onOpenNavigation == null
-            ? null
-            : IconButton(
-                key: const Key('home-appbar-menu-button'),
-                tooltip: tr(
-                  context,
-                  vi: 'Mở menu điều hướng',
-                  en: 'Open navigation menu',
-                ),
-                icon: const Icon(Icons.menu_rounded),
-                onPressed: onOpenNavigation,
-              ),
-        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 232,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        border: Border(right: BorderSide(color: scheme.outlineVariant)),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.lock_outline_rounded,
-                  size: 72,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  tr(context, vi: 'Yêu Cầu Đăng Nhập', en: 'Login Required'),
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  description,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: theme.colorScheme.onSurfaceVariant,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 28),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 28,
-                      vertical: 14,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              child: Row(
+                children: [
+                  const MushroomGlyph(size: 36),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      tr(context, vi: 'Nhận diện nấm', en: 'Mushroom ID'),
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
-                  icon: const Icon(Icons.login),
-                  label: Text(
-                    tr(context, vi: 'Đăng Nhập Ngay', en: 'Login Now'),
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context)
-                        .push(
-                          MaterialPageRoute(
-                            builder: (_) => const LoginScreen(),
-                          ),
-                        )
-                        .then((_) => onLoginSuccess());
-                  },
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+            for (final d in dests)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                child: Material(
+                  color: index == d.page
+                      ? scheme.primaryContainer
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => onSelect(d.page),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 13,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            index == d.page ? d.selectedIcon : d.icon,
+                            size: 22,
+                            color: index == d.page
+                                ? scheme.primary
+                                : scheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            d.label,
+                            style: TextStyle(
+                              fontWeight: index == d.page
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: index == d.page
+                                  ? scheme.primary
+                                  : scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

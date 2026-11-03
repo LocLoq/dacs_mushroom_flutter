@@ -3,19 +3,36 @@ class MushroomCatalogItem {
   final String scientificName;
   final bool isPoisonous;
 
+  /// Ảnh đại diện do backend trả về (tuỳ chọn). Có thể là URL đầy đủ
+  /// (https://...) hoặc đường dẫn tương đối (/media/mushrooms/abc.jpg).
+  final String? imageUrl;
+
   const MushroomCatalogItem({
     required this.name,
     required this.scientificName,
     required this.isPoisonous,
+    this.imageUrl,
   });
 
+  /// Khoá để tìm ảnh đóng gói sẵn trong app: tên khoa học viết thường,
+  /// ký tự lạ thành "_". VD: "Auricularia auricula-judae"
+  /// -> assets/mushrooms/auricularia_auricula_judae.jpg
+  String get assetKey => scientificName
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+      .replaceAll(RegExp(r'^_+|_+$'), '');
+
   factory MushroomCatalogItem.fromJson(Map<String, dynamic> json) {
+    final rawImage = (json['image_url'] ?? json['image'] ?? json['thumbnail'])
+        ?.toString()
+        .trim();
     return MushroomCatalogItem(
       name: (json['name'] ?? '').toString(),
       scientificName: (json['scientific_name'] ?? json['name'] ?? '').toString(),
       isPoisonous: json['is_poisonous'] == true ||
           json['is_poisonous'] == 1 ||
           json['is_poisonous'].toString().toLowerCase() == 'true',
+      imageUrl: (rawImage == null || rawImage.isEmpty) ? null : rawImage,
     );
   }
 
@@ -24,6 +41,7 @@ class MushroomCatalogItem {
       'name': name,
       'scientific_name': scientificName,
       'is_poisonous': isPoisonous,
+      if (imageUrl != null) 'image_url': imageUrl,
     };
   }
 }

@@ -1,7 +1,11 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+
+import '../../../../app/theme/app_colors.dart';
 import '../../../../core/localization/app_text_scope.dart';
+import '../../../../core/widgets/mushroom_glyph.dart';
 import 'result_payload_view.dart';
+import 'result_row.dart';
 
 class ResultPopupDialog extends StatelessWidget {
   final String jobId;
@@ -34,67 +38,29 @@ class ResultPopupDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Row(
-        children: [
-          const Icon(Icons.auto_awesome, color: Colors.amber, size: 24),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              tr(context, vi: 'Kết Quả Nhận Diện Nấm', en: 'Recognition Result'),
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: double.maxFinite,
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (previewBytes != null)
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.memory(
-                    previewBytes!,
-                    height: 180,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              const SizedBox(height: 12),
-              ResultPayloadView(result: result),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.amber.shade700.withOpacity(0.4)),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              _Header(previewBytes: previewBytes),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Icon(Icons.health_and_safety_outlined,
-                        color: Colors.amber.shade800, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        tr(
-                          context,
-                          vi: 'Lưu ý an toàn: Kết quả AI chỉ mang tính tham khảo khoa học. Tuyệt đối không tự ý ăn hoặc chế biến nấm hoang dã.',
-                          en: 'Safety notice: AI results are for reference only. Never consume wild mushrooms based on this prediction.',
-                        ),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: theme.colorScheme.onSurface,
-                          height: 1.3,
-                        ),
-                      ),
+                    ResultPayloadView(result: result),
+                    const SizedBox(height: 10),
+                    const ResultSafetyNotice(),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(tr(context, vi: 'Xong', en: 'Done')),
                     ),
                   ],
                 ),
@@ -103,13 +69,82 @@ class ResultPopupDialog extends StatelessWidget {
           ),
         ),
       ),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(tr(context, vi: 'Đóng', en: 'Close')),
-        ),
-      ],
     );
   }
 }
 
+class _Header extends StatelessWidget {
+  final Uint8List? previewBytes;
+
+  const _Header({this.previewBytes});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 220,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (previewBytes != null)
+            Image.memory(previewBytes!, fit: BoxFit.cover)
+          else
+            Container(
+              decoration: const BoxDecoration(gradient: AppColors.heroGradient),
+              child: const Center(child: MushroomGlyph(size: 96)),
+            ),
+          // Lớp tối dần ở đáy để chữ/nhãn nổi lên
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0x66000000), Color(0x00000000), Color(0x8C000000)],
+                stops: [0, 0.45, 1],
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            bottom: 14,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.auto_awesome_rounded,
+                      color: Colors.white, size: 15),
+                  const SizedBox(width: 6),
+                  Text(
+                    tr(context, vi: 'Kết quả từ AI', en: 'AI result'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            top: 10,
+            right: 10,
+            child: IconButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black.withValues(alpha: 0.35),
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.close_rounded),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

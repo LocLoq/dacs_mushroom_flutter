@@ -4,11 +4,15 @@ import 'app_language.dart';
 class AppTextScope extends InheritedWidget {
   final AppLanguage language;
   final ValueChanged<AppLanguage>? onLanguageChanged;
+  final bool darkMode;
+  final ValueChanged<bool>? onThemeModeChanged;
 
   const AppTextScope({
     super.key,
     required this.language,
     this.onLanguageChanged,
+    this.darkMode = false,
+    this.onThemeModeChanged,
     required super.child,
   });
 
@@ -28,7 +32,7 @@ class AppTextScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(AppTextScope oldWidget) {
-    return language != oldWidget.language;
+    return language != oldWidget.language || darkMode != oldWidget.darkMode;
   }
 }
 
