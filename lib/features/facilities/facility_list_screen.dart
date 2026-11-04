@@ -168,7 +168,7 @@ class _FacilityListScreenState extends State<FacilityListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Cơ sở sản xuất')),
-      floatingActionButton: LocalSession.isAdmin
+      floatingActionButton: LocalSession.canManage
           ? FloatingActionButton.extended(
               onPressed: _create,
               icon: const Icon(Icons.add_rounded),
@@ -329,7 +329,7 @@ class _FacilityDetail extends StatelessWidget {
               ],
             ),
           ],
-          if (LocalSession.isAdmin)
+          if (canManage)
             OutlinedButton.icon(
               onPressed: () => Navigator.of(ctx).push(
                 MaterialPageRoute(

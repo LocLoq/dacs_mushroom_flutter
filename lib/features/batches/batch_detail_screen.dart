@@ -191,7 +191,7 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
                       LocalSession.canManage ? 'Sửa lô' : 'Đổi trạng thái',
                     ),
                   ),
-                  if (LocalSession.isAdmin)
+                  if (canManage)
                     OutlinedButton.icon(
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(

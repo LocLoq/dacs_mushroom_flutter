@@ -9,6 +9,7 @@ import 'package:thu/core/network/mock_config.dart';
 import 'package:thu/core/services/workflow_refresh_service.dart';
 import 'package:thu/core/storage/local_session.dart';
 import 'package:thu/features/batches/care_tab.dart';
+import 'package:thu/core/widgets/net_image.dart';
 import 'package:thu/core/widgets/async_views.dart';
 
 void main() {
@@ -93,6 +94,14 @@ void main() {
       final care = records['data'] as Map;
       expect(care['createdByUserId'], 3);
       expect(care['images'], hasLength(1));
+      final reloadedCare =
+          (await api.get('/cultivation-batches/$bid/care-logs'))['data']
+              as List;
+      expect(
+        (reloadedCare.firstWhere((row) => row['id'] == care['id'])
+            as Map)['images'],
+        hasLength(1),
+      );
       await api.post('/dashboard/tasks/$tid/submissions', {
         'evidence': [
           {'type': 'CARE_LOG', 'recordId': care['id']},
@@ -206,6 +215,40 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  testWidgets('care tab displays the saved photo after loading the list', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      await FarmApi.instance.login('admin', 'admin123');
+      await FarmApi.instance.multipart(
+        'POST',
+        '/cultivation-batches/1/care-logs',
+        fields: {
+          'actionType': 'WATERING',
+          'notes': 'Photo visible after reload',
+        },
+        files: [
+          XFile.fromData(
+            base64Decode(
+              'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6ZQAAAABJRU5ErkJggg==',
+            ),
+            name: 'proof.png',
+            mimeType: 'image/png',
+          ),
+        ],
+      );
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: CareTab(batchId: 1, onChanged: () {})),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Photo visible after reload'), findsOneWidget);
+    expect(find.byType(NetImage), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   test(
     'refresh coalesces identical signals and ignores unknown resources',

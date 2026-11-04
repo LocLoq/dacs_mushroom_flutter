@@ -50,6 +50,88 @@ void main() {
     );
   }
 
+  testWidgets(
+    'manager creates and manages a facility while staff and other facilities remain restricted',
+    (tester) async {
+      final (outside, _, _) = (await tester.runAsync(
+        () => fixture('Outside manager scope'),
+      ))!;
+      await tester.runAsync(
+        () => FarmApi.instance.login('manager', 'manager123'),
+      );
+      final facility =
+          (await tester.runAsync(
+                () => FarmApi.instance.post('/production-facilities', {
+                  'name': 'Manager created',
+                  'address': 'Test',
+                  'facilityType': 'HOUSEHOLD',
+                  'status': 'ACTIVE',
+                }),
+              ))!['data']
+              as Map;
+      final fid = facility['id'];
+      final staffPath = '/production-facilities/$fid/staff';
+      await tester.runAsync(
+        () => FarmApi.instance.post(staffPath, {'userId': 3}),
+      );
+      final batch =
+          (await tester.runAsync(
+                () => FarmApi.instance.post('/cultivation-batches', {
+                  'facilityId': fid,
+                  'mushroomId': 1,
+                  'status': 'PREPARATION',
+                  'startDate': '2026-10-13',
+                }),
+              ))!['data']
+              as Map;
+      final batchId = batch['id'];
+      await tester.runAsync(
+        () => FarmApi.instance.post('/cultivation-batches/$batchId/staff', {
+          'userId': 3,
+        }),
+      );
+      await tester.runAsync(
+        () => expectLater(
+          FarmApi.instance.get(outside),
+          throwsA(isA<ApiException>().having((e) => e.status, 'status', 403)),
+        ),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StaffAssignmentScreen(path: staffPath, title: 'Staff'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Thêm nhân viên'), findsOneWidget);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StaffAssignmentScreen(
+            path: '/production-facilities/$fid/managers',
+            title: 'Managers',
+            managers: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Bạn không có quyền phân công tại đây.'),
+        findsOneWidget,
+      );
+      await tester.runAsync(() => FarmApi.instance.login('staff', 'staff123'));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: StaffAssignmentScreen(path: staffPath, title: 'Staff'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Bạn không có quyền phân công tại đây.'),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   test(
     'mock filters candidates before pagination, accepts legacy and bulk, and rolls back invalid groups',
     () async {

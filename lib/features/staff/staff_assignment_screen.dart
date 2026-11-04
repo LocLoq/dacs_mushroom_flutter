@@ -92,7 +92,7 @@ class _StaffAssignmentScreenState extends State<StaffAssignmentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!LocalSession.isAdmin) {
+    if (widget.managers ? !LocalSession.isAdmin : !LocalSession.canManage) {
       return const Scaffold(
         body: Center(child: Text('Bạn không có quyền phân công tại đây.')),
       );

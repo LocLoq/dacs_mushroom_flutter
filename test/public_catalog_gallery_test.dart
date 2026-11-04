@@ -372,4 +372,45 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('care image opens a zoom view and clears pixels after logout', (
+    tester,
+  ) async {
+    manager();
+    final headers = <String?>[];
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR4nGNUWODAwMDAxAAGAAwKAQTFBdYUAAAAAElFTkSuQmCC',
+    );
+    final transport = MockClient((request) async {
+      headers.add(request.headers['Authorization']);
+      return request.headers['Authorization'] == null
+          ? http.Response('', 404)
+          : http.Response.bytes(
+              png,
+              200,
+              headers: {'content-type': 'image/png'},
+            );
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NetImage(
+          '/uploads/care-logs/private.png',
+          width: 100,
+          height: 100,
+          client: transport,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(Image), findsOneWidget);
+    await tester.tap(find.byType(NetImage));
+    await tester.pumpAndSettle();
+    expect(find.byType(InteractiveViewer), findsOneWidget);
+    expect(headers, ['Bearer manager-token', 'Bearer manager-token']);
+    LocalSession.clear();
+    await tester.pumpAndSettle();
+    expect(find.byType(Image), findsNothing);
+    expect(headers.where((header) => header == null), hasLength(2));
+    expect(tester.takeException(), isNull);
+  });
 }

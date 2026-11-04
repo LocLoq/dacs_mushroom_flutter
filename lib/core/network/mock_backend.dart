@@ -754,7 +754,7 @@ class MockBackend {
   }
 
   J _assignmentRoute(String m, List<String> s, J q, J b) {
-    _need(['admin']);
+    _need(['admin', 'manager']);
     final isBatch = s[0] == 'cultivation-batches';
     final parentId = int.tryParse(s[1]);
     final parents = isBatch ? _batches : _facilities;
@@ -1444,7 +1444,7 @@ class MockBackend {
         return _env(l, q);
       }
       if (m == 'POST') {
-        _need(['admin']);
+        _need(['admin', 'manager']);
         _req(b, ['name', 'address', 'facilityType', 'status']);
         final x = <String, dynamic>{'id': _next(), 'mushroom_ids': <int>[]};
         _copy(x, b, _facilityKeys);
@@ -1453,6 +1453,12 @@ class MockBackend {
               .map((e) => (e as num).toInt())
               .toList();
         _facilities.add(x);
+        if (LocalSession.role == 'manager') {
+          _facilityManagers
+              .putIfAbsent(x.i('id')!, () => <int>{})
+              .add(_me().i('id')!);
+          WorkflowRefreshService.instance.invalidate('permissions');
+        }
         _log('FACILITY_CREATE', 'PRODUCTION_FACILITY', x['id']);
         return {'data': _facilityOut(x)};
       }
@@ -1722,7 +1728,13 @@ class MockBackend {
 
   J _careRoute(String m, int bid, J q, J b, List<XFile> files) {
     final l = _care.putIfAbsent(bid, () => <J>[]);
-    if (m == 'GET') return {'data': _desc(l, 'recordedAt')};
+    if (m == 'GET')
+      return {
+        'data': _desc(
+          l,
+          'recordedAt',
+        ).map((r) => {...r, 'images': r['images'] ?? <J>[]}).toList(),
+      };
     _req(b, ['actionType', 'notes']);
     final r = _rec({
       'batchId': bid,
